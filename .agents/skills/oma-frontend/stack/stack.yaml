@@ -1,0 +1,11 @@
+language: TypeScript
+framework: Next.js 15 (App Router)
+styling: Tailwind CSS v4 + shadcn/ui
+state: Zustand
+server_state: TanStack Query v5
+forms: React Hook Form + Zod
+test: Vitest + Testing Library
+lint: ESLint + Prettier
+source: manual
+detected_from:
+  - user-specified

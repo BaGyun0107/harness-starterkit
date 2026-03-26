@@ -1,0 +1,159 @@
+{
+  "workflows": {
+    "orchestrate": {
+      "persistent": true,
+      "keywords": {
+        "*": ["orchestrate"],
+        "en": ["parallel", "do everything", "run everything"],
+        "ko": ["자동 실행", "자동으로 실행", "자동으로 해", "병렬 실행", "전부 실행", "전부 해", "전부 돌려"],
+        "ja": ["オーケストレート", "並列実行", "自動実行", "全部実行"],
+        "zh": ["编排", "并行执行", "自动执行", "全部执行"],
+        "es": ["orquestar", "paralelo", "ejecutar todo"],
+        "fr": ["orchestrer", "parallèle", "tout exécuter"],
+        "de": ["orchestrieren", "parallel", "alles ausführen"],
+        "pt": ["orquestrar", "paralelo", "executar tudo"],
+        "ru": ["оркестровать", "параллельно", "выполнить всё"],
+        "nl": ["orkestreren", "parallel", "alles uitvoeren"],
+        "pl": ["orkiestrować", "równolegle", "wykonaj wszystko"]
+      }
+    },
+    "ultrawork": {
+      "persistent": true,
+      "keywords": {
+        "*": ["ultrawork", "ulw"]
+      }
+    },
+    "plan": {
+      "persistent": false,
+      "keywords": {
+        "*": ["task breakdown"],
+        "en": ["plan"],
+        "ko": ["계획", "요구사항 분석", "스펙 분석", "스펙 정리"],
+        "ja": ["計画", "要件分析", "タスク分解"],
+        "zh": ["计划", "需求分析", "任务分解"],
+        "es": ["plan", "planificar", "análisis de requisitos"],
+        "fr": ["plan", "planifier", "analyse des exigences"],
+        "de": ["plan", "planen", "anforderungsanalyse"],
+        "pt": ["plano", "planejar", "análise de requisitos"],
+        "ru": ["план", "планировать", "анализ требований"],
+        "nl": ["plan", "plannen", "vereistenanalyse"],
+        "pl": ["plan", "planować", "analiza wymagań"]
+      }
+    },
+    "review": {
+      "persistent": false,
+      "keywords": {
+        "*": ["code review", "security audit", "security review"],
+        "en": ["review"],
+        "ko": ["리뷰", "코드 검토", "보안 검토", "성능 검토"],
+        "ja": ["レビュー", "コードレビュー", "セキュリティ監査"],
+        "zh": ["审查", "代码审查", "安全审计"],
+        "es": ["revisión", "revisar código", "auditoría de seguridad"],
+        "fr": ["revue", "revue de code", "audit de sécurité"],
+        "de": ["review", "code-review", "sicherheitsaudit"],
+        "pt": ["revisão", "revisar código", "auditoria de segurança"],
+        "ru": ["ревью", "обзор кода", "аудит безопасности"],
+        "nl": ["review", "code review", "beveiligingsaudit"],
+        "pl": ["przegląd", "przegląd kodu", "audyt bezpieczeństwa"]
+      }
+    },
+    "debug": {
+      "persistent": false,
+      "keywords": {
+        "*": ["debug"],
+        "en": ["fix bug", "fix error", "fix crash", "fix the bug", "fix the error", "fix the crash"],
+        "ko": ["디버그", "버그 수정", "에러 수정", "오류 수정", "버그 찾아", "버그 고쳐", "버그 잡아"],
+        "ja": ["デバッグ", "バグ修正", "エラー修正"],
+        "zh": ["调试", "修复 bug", "修复错误", "修复崩溃"],
+        "es": ["depurar", "corregir bug", "corregir error"],
+        "fr": ["déboguer", "corriger bug", "corriger erreur"],
+        "de": ["debuggen", "bug beheben", "fehler beheben"],
+        "pt": ["depurar", "corrigir bug", "corrigir erro"],
+        "ru": ["отладка", "исправить баг", "исправить ошибку"],
+        "nl": ["debuggen", "bug oplossen", "fout oplossen"],
+        "pl": ["debugować", "naprawić bug", "naprawić błąd"]
+      }
+    },
+    "brainstorm": {
+      "persistent": false,
+      "keywords": {
+        "*": ["brainstorm"],
+        "en": ["ideate", "explore design"],
+        "ko": ["브레인스토밍", "아이디어", "설계 탐색", "디자인 탐색"],
+        "ja": ["ブレインストーミング", "アイデア", "設計探索"],
+        "zh": ["头脑风暴", "创意", "设计探索"],
+        "es": ["lluvia de ideas", "idear", "explorar diseño"],
+        "fr": ["brainstorming", "idéer", "explorer le design"],
+        "de": ["brainstorming", "ideenfindung", "design erkunden"],
+        "pt": ["brainstorming", "idear", "explorar design"],
+        "ru": ["мозговой штурм", "идеи", "исследовать дизайн"],
+        "nl": ["brainstormen", "ideeën", "ontwerp verkennen"],
+        "pl": ["burza mózgów", "pomysły", "eksploracja projektu"]
+      }
+    },
+    "coordinate": {
+      "persistent": true,
+      "keywords": {
+        "*": ["coordinate", "step by step"],
+        "ko": ["코디네이트", "단계별", "단계별로"],
+        "ja": ["コーディネート", "ステップバイステップ"],
+        "zh": ["协调", "逐步"],
+        "es": ["coordinar", "paso a paso"],
+        "fr": ["coordonner", "étape par étape"],
+        "de": ["koordinieren", "schritt für schritt"],
+        "pt": ["coordenar", "passo a passo"],
+        "ru": ["координировать", "шаг за шагом"],
+        "nl": ["coördineren", "stap voor stap"],
+        "pl": ["koordynować", "krok po kroku"]
+      }
+    },
+    "deepinit": {
+      "persistent": false,
+      "keywords": {
+        "*": ["deepinit"],
+        "ko": ["프로젝트 초기화", "코드베이스 초기화"],
+        "ja": ["プロジェクト初期化"],
+        "zh": ["项目初始化"],
+        "es": ["inicializar proyecto"],
+        "fr": ["initialiser projet"],
+        "de": ["projekt initialisieren"],
+        "pt": ["inicializar projeto"],
+        "ru": ["инициализация проекта"],
+        "nl": ["project initialiseren"],
+        "pl": ["inicjalizacja projektu"]
+      }
+    },
+    "design": {
+      "persistent": false,
+      "keywords": {
+        "*": ["design system", "DESIGN.md", "design token"],
+        "en": ["design", "landing page", "ui design", "color palette", "typography", "dark theme", "responsive design", "glassmorphism"],
+        "ko": ["디자인", "랜딩페이지", "디자인 시스템", "UI 디자인", "색상 팔레트", "타이포그래피", "다크 테마", "반응형"],
+        "ja": ["デザイン", "ランディングページ", "デザインシステム", "UIデザイン", "カラーパレット", "タイポグラフィ", "ダークテーマ", "レスポンシブ"],
+        "zh": ["设计", "着陆页", "设计系统", "UI设计", "配色方案", "字体排版", "暗色主题", "响应式"],
+        "es": ["diseño", "página de aterrizaje", "sistema de diseño", "diseño UI", "paleta de colores", "tipografía", "tema oscuro", "diseño responsivo"],
+        "fr": ["design", "page d'atterrissage", "système de design", "design UI", "palette de couleurs", "typographie", "thème sombre", "design responsif"],
+        "de": ["Design", "Landingpage", "Designsystem", "UI-Design", "Farbpalette", "Typografie", "dunkles Theme", "responsives Design"],
+        "pt": ["design", "página de destino", "sistema de design", "design UI", "paleta de cores", "tipografia", "tema escuro", "design responsivo"],
+        "ru": ["дизайн", "лендинг", "дизайн-система", "UI дизайн", "цветовая палитра", "типографика", "тёмная тема", "адаптивный дизайн"],
+        "nl": ["ontwerp", "landingspagina", "ontwerpsysteem", "UI-ontwerp", "kleurenpalet", "typografie", "donker thema", "responsief ontwerp"],
+        "pl": ["projekt", "strona docelowa", "system projektowy", "projekt UI", "paleta kolorów", "typografia", "ciemny motyw", "responsywny projekt"]
+      }
+    }
+  },
+  "informationalPatterns": {
+    "en": ["what is", "what are", "how to", "how does", "explain", "describe", "tell me about"],
+    "ko": ["뭐야", "뭐임", "무엇", "어떻게", "설명해", "알려줘"],
+    "ja": ["とは", "って何", "どうやって", "説明して"],
+    "zh": ["是什么", "什么是", "怎么", "解释"],
+    "es": ["qué es", "cómo", "explica"],
+    "fr": ["c'est quoi", "comment", "explique"],
+    "de": ["was ist", "wie", "erkläre"],
+    "pt": ["o que é", "como", "explique"],
+    "ru": ["что такое", "как", "объясни"],
+    "nl": ["wat is", "hoe", "leg uit"],
+    "pl": ["co to", "jak", "wyjaśnij"]
+  },
+  "excludedWorkflows": ["commit", "setup", "tools", "stack-set", "exec-plan"],
+  "cjkScripts": ["ko", "ja", "zh"]
+}

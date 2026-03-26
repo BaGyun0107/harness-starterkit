@@ -1,0 +1,11 @@
+language: TypeScript
+runtime: Node.js
+framework: Express
+orm: Prisma
+validation: Zod
+migration: Prisma Migrate
+test: Vitest
+lint: ESLint + Prettier
+source: manual
+detected_from:
+  - user-specified
