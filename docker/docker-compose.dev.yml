@@ -1,0 +1,19 @@
+# Development environment overrides
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  server:
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+    ports:
+      - "8080:8080"
+      - "9229:9229"  # Node.js debugger
+
+  front:
+    environment:
+      - NEXT_PUBLIC_API_ORIGIN=http://server:8080
+
+  mysql:
+    ports:
+      - "3306:3306"
