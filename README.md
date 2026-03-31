@@ -120,3 +120,7 @@ hotfix/* → 긴급 수정 (main + dev)
 - bun (gstack 빌드용)
 - Docker & Docker Compose (배포용)
 - Claude Code CLI
+
+## 참고 레포
+Gstack - https://github.com/garrytan/gstack
+oh-my-agent - https://github.com/first-fluke/oh-my-agent
