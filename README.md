@@ -123,4 +123,5 @@ hotfix/* → 긴급 수정 (main + dev)
 
 ## 참고 레포
 Gstack - https://github.com/garrytan/gstack
+
 oh-my-agent - https://github.com/first-fluke/oh-my-agent
