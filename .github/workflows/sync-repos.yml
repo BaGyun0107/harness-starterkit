@@ -1,0 +1,90 @@
+name: Sync to Deploy Repos
+
+on:
+  push:
+    branches: [main, dev]
+
+jobs:
+  sync-front:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: sync-front-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate GitHub App token for front org
+        id: app-token-front
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: __FRONT_ORG__
+
+      - name: Subtree split & push front
+        env:
+          DEPLOY_TOKEN: ${{ steps.app-token-front.outputs.token }}
+        run: |
+          git config --unset-all http.https://github.com/.extraheader || true
+
+          BRANCH="${{ github.ref_name }}"
+          FRONT_REPO="https://x-access-token:${DEPLOY_TOKEN}@github.com/__FRONT_ORG__/front-__PROJECT__.git"
+
+          git subtree split --prefix=apps/front -b split-front
+          git push "$FRONT_REPO" split-front:$BRANCH --force-with-lease || \
+            git push "$FRONT_REPO" split-front:$BRANCH --force
+
+      - name: Notify sync result
+        if: always() && secrets.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "${{ job.status == 'success' && '✅' || '❌' }} *FRONT SYNC ${{ job.status }}*\nRepo: ${{ github.repository }}\nBranch: ${{ github.ref_name }}\nCommit: `${{ github.sha }}`\nBy: ${{ github.actor }}"
+            }
+
+  sync-back:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: sync-back-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate GitHub App token for back org
+        id: app-token-back
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: __BACK_ORG__
+
+      - name: Subtree split & push back
+        env:
+          DEPLOY_TOKEN: ${{ steps.app-token-back.outputs.token }}
+        run: |
+          git config --unset-all http.https://github.com/.extraheader || true
+
+          BRANCH="${{ github.ref_name }}"
+          BACK_REPO="https://x-access-token:${DEPLOY_TOKEN}@github.com/__BACK_ORG__/back-__PROJECT__.git"
+
+          git subtree split --prefix=apps/back -b split-back
+          git push "$BACK_REPO" split-back:$BRANCH --force-with-lease || \
+            git push "$BACK_REPO" split-back:$BRANCH --force
+
+      - name: Notify sync result
+        if: always() && secrets.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "${{ job.status == 'success' && '✅' || '❌' }} *BACK SYNC ${{ job.status }}*\nRepo: ${{ github.repository }}\nBranch: ${{ github.ref_name }}\nCommit: `${{ github.sha }}`\nBy: ${{ github.actor }}"
+            }

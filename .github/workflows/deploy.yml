@@ -22,7 +22,7 @@ jobs:
         with:
           filters: |
             server:
-              - 'apps/server/**'
+              - 'apps/back/**'
               - 'docker/Dockerfile.server'
             front:
               - 'apps/front/**'
@@ -52,19 +52,19 @@ jobs:
           fi
 
       - name: Create server .env file
-        run: echo "${{ secrets.SERVER_ENV_FILE }}" > apps/server/.env
+        run: echo "${{ secrets.SERVER_ENV_FILE }}" > apps/back/.env
 
       - name: Build Docker image
         run: |
           docker build \
             -f docker/Dockerfile.server \
-            -t codi-goyo-server:${{ github.sha }} \
-            -t codi-goyo-server:latest \
+            -t __PROJECT__-server:${{ github.sha }} \
+            -t __PROJECT__-server:latest \
             .
 
       - name: Save & compress Docker image
         run: |
-          docker save codi-goyo-server:latest | gzip > server-image.tar.gz
+          docker save __PROJECT__-server:latest | gzip > server-image.tar.gz
 
       - name: Deploy to server
         uses: appleboy/scp-action@v0.1.7
@@ -158,13 +158,13 @@ jobs:
         run: |
           docker build \
             -f docker/Dockerfile.front \
-            -t codi-goyo-front:${{ github.sha }} \
-            -t codi-goyo-front:latest \
+            -t __PROJECT__-front:${{ github.sha }} \
+            -t __PROJECT__-front:latest \
             .
 
       - name: Save & compress Docker image
         run: |
-          docker save codi-goyo-front:latest | gzip > front-image.tar.gz
+          docker save __PROJECT__-front:latest | gzip > front-image.tar.gz
 
       - name: Deploy to server
         uses: appleboy/scp-action@v0.1.7

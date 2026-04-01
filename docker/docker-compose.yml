@@ -6,7 +6,7 @@ services:
     ports:
       - "${SERVER_PORT:-8080}:8080"
     env_file:
-      - ../apps/server/.env
+      - ../apps/back/.env
     environment:
       - NODE_ENV=${NODE_ENV:-production}
     depends_on:
@@ -38,7 +38,7 @@ services:
       - "${MYSQL_PORT:-3306}:3306"
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-codi_goyo}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-app_db}
       MYSQL_CHARACTER_SET_SERVER: utf8mb4
       MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
     volumes:
