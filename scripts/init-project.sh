@@ -8,7 +8,9 @@ set -euo pipefail
 # ── GitHub App 설정 ──
 # TODO: Infisical 구축 후 .pem 파일을 Infisical에 보관하고 GITHUB_APP_PEM 환경변수로 주입
 GITHUB_APP_ID="3241562"
-GITHUB_APP_PEM="${GITHUB_APP_PEM:-$HOME/Downloads/repo-sync.private-key.pem}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+GITHUB_APP_PEM="${GITHUB_APP_PEM:-$PROJECT_ROOT/codi-repo-sync.private-key.pem}"
 
 # ── 색상 ──
 RED='\033[0;31m'
@@ -36,7 +38,7 @@ if [ $# -lt 3 ]; then
   echo "  - GitHub CLI (gh) 설치 및 로그인"
   echo "  - 대상 Organization에 레포 생성 권한"
   echo "  - GitHub App private key (.pem) 파일"
-  echo "    기본 경로: ~/Downloads/repo-sync.private-key.pem"
+  echo "    기본 경로: 프로젝트 루트/repo-sync.private-key.pem"
   echo "    또는 GITHUB_APP_PEM 환경변수로 지정"
   exit 1
 fi

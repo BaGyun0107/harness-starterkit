@@ -96,3 +96,5 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 .claude/skills/gstack/browse/dist/
 .claude/skills/gstack/design/dist/
 .claude/skills/gstack/node_modules/
+
+*.pem

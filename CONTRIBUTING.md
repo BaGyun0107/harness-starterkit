@@ -212,7 +212,7 @@ cross-org push를 위해 GitHub App을 사용합니다. PAT와 달리 만료가 
 | 설치된 Org | your-front-org, your-back-org |
 
 `.pem` 파일이 필요합니다:
-- 기본 경로: `~/Downloads/repo-sync.private-key.pem`
+- 기본 경로: 프로젝트 루트 `codi-repo-sync.private-key.pem` (.gitignore에 포함)
 - 또는: `GITHUB_APP_PEM=/path/to/key.pem ./scripts/init-project.sh ...`
 
 ## GitHub Secrets 정리

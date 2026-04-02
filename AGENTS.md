@@ -80,7 +80,7 @@ dev-{project}  (모노레포: 개발)
 필요 조건:
 - GitHub CLI (`gh`) 로그인 상태
 - GitHub App private key (`.pem` 파일)
-  - 기본 경로: `~/Downloads/repo-sync.private-key.pem`
+  - 기본 경로: 프로젝트 루트 `codi-repo-sync.private-key.pem` (.gitignore에 포함)
   - 또는: `GITHUB_APP_PEM=/path/to/key.pem ./scripts/init-project.sh ...`
 
 ## 배포 파이프라인

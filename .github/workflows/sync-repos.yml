@@ -37,7 +37,8 @@ jobs:
             git push "$FRONT_REPO" split-front:$BRANCH --force
 
       - name: Notify sync result
-        if: always() && secrets.SLACK_WEBHOOK_URL != ''
+        if: always()
+        continue-on-error: true
         uses: slackapi/slack-github-action@v2.0.0
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
@@ -79,7 +80,8 @@ jobs:
             git push "$BACK_REPO" split-back:$BRANCH --force
 
       - name: Notify sync result
-        if: always() && secrets.SLACK_WEBHOOK_URL != ''
+        if: always()
+        continue-on-error: true
         uses: slackapi/slack-github-action@v2.0.0
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
