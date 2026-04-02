@@ -33,13 +33,27 @@ description: |
   │
   ├── Step 4: AskUserQuestion (프로젝트 정보 수집)
   │   ├── project-name
-  │   ├── front-org (GitHub Organization)
-  │   └── back-org (GitHub Organization)
+  │   ├── front-org (front가 있는 경우만)
+  │   └── back-org (back이 있는 경우만)
   │
   ├── Step 5: Git 초기화 (필요한 경우)
   │
-  └── Step 6: scripts/init-project.sh 실행 (3개 레포 생성)
+  └── Step 6: scripts/init-project.sh 실행 (구성에 맞는 레포만 생성)
 ```
+
+## 레포 생성 모드 결정
+
+Step 1~3의 결과로 **최종적으로 프로젝트에 포함된 앱**을 기준으로 레포 생성 모드를 결정한다:
+
+| apps/front/ 존재 | apps/back/ 존재 | 모드 | 생성되는 레포 |
+|---|---|---|---|
+| O | O | `full` | dev-{name}, front-{name}, back-{name} |
+| O | X | `front-only` | dev-{name}, front-{name} |
+| X | O | `back-only` | dev-{name}, back-{name} |
+
+- **dev 레포는 항상 생성된다** (모노레포 역할)
+- front가 없으면 front 레포를 생성하지 않고, front-org도 질문하지 않는다
+- back이 없으면 back 레포를 생성하지 않고, back-org도 질문하지 않는다
 
 ## Step 1: 현재 상태 감지
 
@@ -64,26 +78,29 @@ echo "FRONT: $FRONT_EXISTS, BACK: $BACK_EXISTS"
 AskUserQuestion으로 아래 옵션을 제시한다.
 감지 결과를 포함해서 현재 상태를 알려준다.
 
+**중요: AskUserQuestion의 각 option에 반드시 label과 description을 모두 채워야 한다.**
+- label: 옵션 이름 (예: "전체 초기화 (front + back)")
+- description: 해당 옵션이 무엇을 하는지 구체적으로 설명
+
 ```
-현재 상태:
-  apps/front/: {있음|없음}
-  apps/back/:  {있음|없음}
-
-프로젝트 초기화 옵션을 선택해주세요:
-
-A) 전체 초기화 (front + back 모두 생성)
-   → oma-frontend, oma-backend 스킬 기반으로 아키텍처, 유틸, 공용함수까지 포함된
-     프로덕션 레디 보일러플레이트를 생성합니다.
-
-B) Frontend만 설정
-   → Next.js 15 + FSD-lite + shadcn/ui + TanStack Query + api-client 구조
-
-C) Backend만 설정
-   → Express 5 + Prisma + BaseController + 미들웨어 스택 + 인증 시스템 + 유틸리티
-
-D) 초기환경 건너뛰기
-   → 이미 소스코드가 있는 경우. 바로 GitHub 레포 생성으로 넘어갑니다.
+question: "현재 상태:\n  apps/front/: {있음|없음}\n  apps/back/:  {있음|없음}\n\n프로젝트 초기화 옵션을 선택해주세요."
+header: "초기화 옵션"
+options:
+  - label: "전체 초기화 (front + back)"
+    description: "oma-frontend, oma-backend 스킬 기반으로 아키텍처, 유틸, 공용함수까지 포함된 프로덕션 레디 보일러플레이트를 생성합니다"
+  - label: "Frontend만 설정"
+    description: "Next.js 15 + FSD-lite + shadcn/ui + TanStack Query + api-client 구조를 생성합니다"
+  - label: "Backend만 설정"
+    description: "Express 5 + Prisma + BaseController + 미들웨어 스택 + 인증 시스템 + 유틸리티를 생성합니다"
+  - label: "초기환경 건너뛰기"
+    description: "이미 소스코드가 있는 경우. 바로 GitHub 레포 생성 단계로 넘어갑니다"
 ```
+
+감지 결과에 따라 Recommended 표시:
+- 둘 다 있음 → "초기환경 건너뛰기 (Recommended)"
+- front만 없음 → "Frontend만 설정 (Recommended)"
+- back만 없음 → "Backend만 설정 (Recommended)"
+- 둘 다 없음 → "전체 초기화 (Recommended)"
 
 ## Step 3: 스캐폴딩 실행
 
@@ -206,41 +223,79 @@ apps/back/ 에 Express + Prisma 백엔드 프로젝트를 초기화해야 한다
 
 ## Step 4: 프로젝트 정보 수집
 
-AskUserQuestion을 **3번** 순차적으로 호출해서 정보를 수집한다.
+프로젝트 구성(front 존재 여부, back 존재 여부)에 따라 **필요한 정보만** 수집한다.
 
-### 4-1. 프로젝트 이름
+### 4-1. 프로젝트 이름 (항상 질문)
 
 AskUserQuestion으로 프로젝트 이름을 입력받는다.
-옵션이 아닌 **텍스트 입력**이 필요하므로, 예시를 옵션으로 제시하되
-사용자가 Other를 선택해서 직접 입력할 수 있도록 안내한다.
+현재 디렉토리명을 기본 옵션으로 제시한다.
 
 ```
 question: "프로젝트 이름을 입력해주세요. (예: my-app → dev-my-app, front-my-app, back-my-app 레포가 생성됩니다)"
+header: "프로젝트명"
 options:
+  - label: "{현재 디렉토리명}"
+    description: "현재 디렉토리명 기반으로 레포를 생성합니다"
   - label: "직접 입력"
     description: "Other를 선택하고 프로젝트 이름을 입력하세요 (예: my-app)"
 ```
 
-### 4-2. Front Organization
+### 4-2. Organization 질문 (구성에 따라 다름)
+
+**apps/front/가 있고 apps/back/도 있는 경우 (full 모드):**
+AskUserQuestion 1회로 front-org와 back-org를 동시에 질문한다.
 
 ```
-question: "Front 레포가 생성될 GitHub Organization을 선택해주세요"
-options:
-  - label: "CODIWORKS-Vercel (Recommended)"
-    description: "front-{name} 레포가 CODIWORKS-Vercel Org에 생성됩니다"
-  - label: "직접 입력"
-    description: "Other를 선택하고 Organization 이름을 입력하세요"
+questions:
+  - question: "Front 레포가 생성될 GitHub Organization을 선택해주세요"
+    header: "Front Org"
+    options:
+      - label: "CODIWORKS-Vercel (Recommended)"
+        description: "front-{name} 레포가 CODIWORKS-Vercel Org에 생성됩니다"
+      - label: "직접 입력"
+        description: "Other를 선택하고 Organization 이름을 입력하세요"
+  - question: "Back/Dev 레포가 생성될 GitHub Organization을 선택해주세요"
+    header: "Back Org"
+    options:
+      - label: "CODIWORKS-Engineer (Recommended)"
+        description: "dev-{name}, back-{name} 레포가 CODIWORKS-Engineer Org에 생성됩니다"
+      - label: "직접 입력"
+        description: "Other를 선택하고 Organization 이름을 입력하세요"
 ```
 
-### 4-3. Back Organization
+**apps/front/만 있는 경우 (front-only 모드):**
+front-org와 dev-org만 질문한다. back-org는 질문하지 않는다.
 
 ```
-question: "Back/Dev 레포가 생성될 GitHub Organization을 선택해주세요"
-options:
-  - label: "CODIWORKS-Engineer (Recommended)"
-    description: "dev-{name}, back-{name} 레포가 CODIWORKS-Engineer Org에 생성됩니다"
-  - label: "직접 입력"
-    description: "Other를 선택하고 Organization 이름을 입력하세요"
+questions:
+  - question: "Front 레포가 생성될 GitHub Organization을 선택해주세요"
+    header: "Front Org"
+    options:
+      - label: "CODIWORKS-Vercel (Recommended)"
+        description: "front-{name} 레포가 CODIWORKS-Vercel Org에 생성됩니다"
+      - label: "직접 입력"
+        description: "Other를 선택하고 Organization 이름을 입력하세요"
+  - question: "Dev 레포가 생성될 GitHub Organization을 선택해주세요"
+    header: "Dev Org"
+    options:
+      - label: "CODIWORKS-Engineer (Recommended)"
+        description: "dev-{name} 레포가 CODIWORKS-Engineer Org에 생성됩니다"
+      - label: "직접 입력"
+        description: "Other를 선택하고 Organization 이름을 입력하세요"
+```
+
+**apps/back/만 있는 경우 (back-only 모드):**
+back-org만 질문한다. front-org는 질문하지 않는다. dev 레포도 같은 org에 생성된다.
+
+```
+questions:
+  - question: "Back/Dev 레포가 생성될 GitHub Organization을 선택해주세요"
+    header: "Back Org"
+    options:
+      - label: "CODIWORKS-Engineer (Recommended)"
+        description: "dev-{name}, back-{name} 레포가 CODIWORKS-Engineer Org에 생성됩니다"
+      - label: "직접 입력"
+        description: "Other를 선택하고 Organization 이름을 입력하세요"
 ```
 
 사용자가 기본값(Recommended)을 선택하면 해당 Org 이름을 사용한다.
@@ -269,11 +324,22 @@ fi
 
 ## Step 6: init-project.sh 실행
 
-수집한 정보로 스크립트를 실행한다:
+수집한 정보와 레포 생성 모드에 따라 스크립트를 실행한다:
 
 ```bash
-./scripts/init-project.sh {project-name} {front-org} {back-org}
+# full 모드 (front + back 모두 존재)
+./scripts/init-project.sh {project-name} --mode full --front-org {front-org} --back-org {back-org}
+
+# front-only 모드 (front만 존재)
+./scripts/init-project.sh {project-name} --mode front-only --front-org {front-org} --back-org {dev-org}
+
+# back-only 모드 (back만 존재)
+./scripts/init-project.sh {project-name} --mode back-only --back-org {back-org}
 ```
+
+- `--mode`: `full` | `front-only` | `back-only`
+- `--front-org`: front 레포가 생성될 Organization (front-only, full 모드에서 필수)
+- `--back-org`: back/dev 레포가 생성될 Organization (항상 필수 — dev 레포도 여기에 생성)
 
 실행 전 사전 조건을 확인한다:
 1. `gh auth status` — GitHub CLI 로그인 상태
@@ -284,24 +350,24 @@ fi
 
 ## Step 7: 완료 안내
 
-모든 단계가 완료되면 다음을 출력한다:
+모든 단계가 완료되면 **실제로 생성된 레포만** 출력한다:
 
 ```
 프로젝트 초기화 완료!
 
 생성된 레포:
   - dev-{name}: https://github.com/{back-org}/dev-{name}
-  - front-{name}: https://github.com/{front-org}/front-{name}
-  - back-{name}: https://github.com/{back-org}/back-{name}
+  - front-{name}: https://github.com/{front-org}/front-{name}    ← front가 있는 경우만
+  - back-{name}: https://github.com/{back-org}/back-{name}      ← back이 있는 경우만
 
 다음 단계:
   1. 수동 Secrets 등록 (SSH, Slack, 서버 정보)
-  2. Vercel에서 front-{name} 레포 연결
+  2. Vercel에서 front-{name} 레포 연결              ← front가 있는 경우만
   3. 개발 시작: git push origin main → 자동 동기화 → 자동 배포
 
 로컬 개발:
-  cd apps/front && npm run dev    # http://localhost:3000
-  cd apps/back && npm run dev     # http://localhost:8080
+  cd apps/front && npm run dev    # http://localhost:3000   ← front가 있는 경우만
+  cd apps/back && npm run dev     # http://localhost:8080   ← back이 있는 경우만
 ```
 
 ## 주의사항
