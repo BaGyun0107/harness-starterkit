@@ -1,5 +1,6 @@
 ---
 name: oma-backend
+model: sonnet
 description: |
   Backend specialist for APIs, databases, authentication with clean architecture
   (BaseController/Service/Repository pattern). Use for API, endpoint, REST, database,

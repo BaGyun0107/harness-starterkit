@@ -1,5 +1,6 @@
 ---
 name: oma-frontend
+model: sonnet
 description: Frontend specialist for React, Next.js, TypeScript with FSD-lite architecture, shadcn/ui, and design system alignment. Use for UI, component, page, layout, CSS, Tailwind, and shadcn work.
 ---
 

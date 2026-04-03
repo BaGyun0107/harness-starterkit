@@ -1,5 +1,6 @@
 ---
 name: oma-translator
+model: haiku
 description: Context-aware translation that preserves tone, style, and natural word order. Use when translating UI strings, documentation, marketing copy, or any multilingual content. Infers register, domain, and style from the source text and surrounding codebase context.
 ---
 

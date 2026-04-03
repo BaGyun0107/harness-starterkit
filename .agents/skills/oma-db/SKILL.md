@@ -1,5 +1,6 @@
 ---
 name: oma-db
+model: sonnet
 description: Database specialist for SQL, NoSQL, and vector database modeling, schema design, normalization, indexing, transactions, integrity, concurrency control, backup, capacity planning, data standards, anti-pattern review, and compliance-aware database design. Use for database, schema, ERD, table design, document model, vector index design, RAG retrieval architecture, migration, query tuning, glossary, capacity estimation, backup strategy, database anti-pattern remediation work, and ISO 27001, ISO 27002, or ISO 22301-aware database recommendations.
 ---
 

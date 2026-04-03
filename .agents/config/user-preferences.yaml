@@ -21,4 +21,20 @@ agent_cli_mapping:
   mobile: claude
   qa: claude
   debug: claude
+
+# 에이전트별 모델 배분 전략
+# 탐색/검색: haiku (빠르고 저렴)
+# 일반 코딩: sonnet (비용 대비 성능 최적)
+# 아키텍처/보안: opus (깊은 추론 필요)
+# 문서 작성: haiku (구조 단순)
+# 복잡한 디버깅: opus (전체 시스템 맥락 필요)
+agent_model_mapping:
+  explore: haiku
+  oma-frontend: sonnet
+  oma-backend: sonnet
+  oma-db: sonnet
+  oma-qa: opus
+  oma-translator: haiku
+  debug: opus
+  pm: haiku
   pm: claude
