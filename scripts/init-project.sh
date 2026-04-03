@@ -168,8 +168,21 @@ cleanup() {
 }
 trap cleanup ERR
 
+# ── 레포 존재 여부 체크 후 생성 ──
+create_repo_if_not_exists() {
+  local repo="$1"
+  local desc="$2"
+  if gh repo view "$repo" &>/dev/null; then
+    info "  $repo (이미 존재 — 건너뜀)"
+  else
+    gh repo create "$repo" --private --description "$desc"
+    CREATED_REPOS+=("$repo")
+    info "  $repo (생성 완료)"
+  fi
+}
+
 # ── 총 스텝 수 계산 ──
-TOTAL_STEPS=6
+TOTAL_STEPS=7
 
 # ══════════════════════════════════════════════════════════
 #  Step 1: 레포 생성
@@ -178,21 +191,18 @@ info "Step 1/${TOTAL_STEPS}: GitHub 레포 생성..."
 
 # dev 레포는 항상 생성
 info "  dev-${PROJECT_NAME} (개발 모노레포)"
-gh repo create "${BACK_ORG}/dev-${PROJECT_NAME}" --private --description "Development monorepo for ${PROJECT_NAME}"
-CREATED_REPOS+=("${BACK_ORG}/dev-${PROJECT_NAME}")
+create_repo_if_not_exists "${BACK_ORG}/dev-${PROJECT_NAME}" "Development monorepo for ${PROJECT_NAME}"
 
 # front 레포 (front-only 또는 full 모드)
 if [ "$CREATE_FRONT" = true ]; then
   info "  front-${PROJECT_NAME} (Vercel 배포용)"
-  gh repo create "${FRONT_ORG}/front-${PROJECT_NAME}" --private --description "Frontend deploy repo for ${PROJECT_NAME}"
-  CREATED_REPOS+=("${FRONT_ORG}/front-${PROJECT_NAME}")
+  create_repo_if_not_exists "${FRONT_ORG}/front-${PROJECT_NAME}" "Frontend deploy repo for ${PROJECT_NAME}"
 fi
 
 # back 레포 (back-only 또는 full 모드)
 if [ "$CREATE_BACK" = true ]; then
   info "  back-${PROJECT_NAME} (Docker 배포용)"
-  gh repo create "${BACK_ORG}/back-${PROJECT_NAME}" --private --description "Backend deploy repo for ${PROJECT_NAME}"
-  CREATED_REPOS+=("${BACK_ORG}/back-${PROJECT_NAME}")
+  create_repo_if_not_exists "${BACK_ORG}/back-${PROJECT_NAME}" "Backend deploy repo for ${PROJECT_NAME}"
 fi
 
 # ══════════════════════════════════════════════════════════
@@ -207,11 +217,6 @@ if [ -f ".github/workflows/sync-repos.yml" ]; then
   fi
   replace_in_file "s/__BACK_ORG__/${BACK_ORG}/g" .github/workflows/sync-repos.yml
   info "  sync-repos.yml 치환 완료"
-fi
-
-if [ -f ".github/workflows/deploy.yml" ]; then
-  replace_in_file "s/__PROJECT__/${PROJECT_NAME}/g" .github/workflows/deploy.yml
-  info "  deploy.yml 치환 완료"
 fi
 
 if [ -f ".infisical.json.tmpl" ]; then
@@ -232,6 +237,38 @@ info "  APP_ID 시크릿 등록 완료"
 
 gh secret set APP_PRIVATE_KEY --repo "${BACK_ORG}/dev-${PROJECT_NAME}" < "$GITHUB_APP_PEM"
 info "  APP_PRIVATE_KEY 시크릿 등록 완료"
+
+# ══════════════════════════════════════════════════════════
+#  Step 3.5: back-* 레포에 deploy caller + docker-compose push
+# ══════════════════════════════════════════════════════════
+if [ "$CREATE_BACK" = true ] || gh repo view "${BACK_ORG}/back-${PROJECT_NAME}" &>/dev/null; then
+  info "Step 3.5/${TOTAL_STEPS}: back-${PROJECT_NAME} 에 deploy workflow 배포..."
+
+  (
+    DEPLOY_TMP=$(mktemp -d)
+    trap 'rm -rf "$DEPLOY_TMP"' EXIT
+    cd "$DEPLOY_TMP"
+
+    gh repo clone "${BACK_ORG}/back-${PROJECT_NAME}" . -- --depth 1 2>/dev/null || \
+      git clone "https://github.com/${BACK_ORG}/back-${PROJECT_NAME}.git" . --depth 1
+
+    # gh 인증 토큰으로 push 가능하도록 remote URL 설정
+    git remote set-url origin \
+      "https://x-access-token:$(gh auth token)@github.com/${BACK_ORG}/back-${PROJECT_NAME}.git"
+
+    # deploy caller workflow 복사 + 플레이스홀더 치환
+    mkdir -p .github/workflows
+    cp "${PROJECT_ROOT}/templates/back-deploy.yml" .github/workflows/deploy.yml
+    replace_in_file "s/__BACK_ORG__/${BACK_ORG}/g" .github/workflows/deploy.yml
+    replace_in_file "s/__DEV_REPO__/dev-${PROJECT_NAME}/g" .github/workflows/deploy.yml
+
+    git add .github/workflows/deploy.yml
+    git commit -m "chore: 배포 파이프라인 자동 설정 (Reusable Workflow)" || true
+    git push origin main
+  ) || warn "deploy workflow push 실패 — 수동 등록 필요"
+
+  info "  deploy workflow push 완료"
+fi
 
 # ══════════════════════════════════════════════════════════
 #  Step 4: Git remote 설정
@@ -287,6 +324,11 @@ echo "  Auto-configured:"
 echo "    ✅ APP_ID           (GitHub App ID)"
 echo "    ✅ APP_PRIVATE_KEY  (GitHub App private key)"
 echo "    → sync-repos.yml이 매 실행마다 토큰을 자동 발급합니다 (만료 걱정 없음)"
+if [ "$CREATE_BACK" = true ]; then
+  echo ""
+  echo "    ✅ deploy.yml       (Reusable Workflow caller)"
+  echo "    → back-${PROJECT_NAME} push 시 자동 배포"
+fi
 echo ""
 echo "════════════════════════════════════════════════════════════"
 echo -e "${YELLOW}  수동 설정 필요${NC}"
@@ -311,15 +353,13 @@ if [ "$CREATE_BACK" = true ]; then
   echo "    PRD_SERVER_HOST    운영 서버 IP"
   echo "    PRD_SERVER_USER    운영 서버 SSH 유저"
   echo "    PRD_DEPLOY_DIR     운영 배포 디렉터리"
-  echo "    SERVER_ENV_FILE    백엔드 .env 파일 내용"
-  echo "    FRONT_ENV_FILE     프론트 .env.local 파일 내용"
+  echo "    SERVER_ENV_FILE    백엔드 .env 파일 내용 (Infisical 연동 전 임시)"
+  echo ""
+  echo "  Infisical 연동 (권장):"
+  echo "    → Infisical 서버에서 환경변수를 직접 주입하면 SERVER_ENV_FILE 불필요"
+  echo "    → deploy-backend.yml에 Infisical CLI 블록 활성화"
   echo ""
 fi
-
-# TODO: Infisical 구축 후 아래 주석 해제
-# echo "  Infisical 설정:"
-# echo "    INFISICAL_TOKEN   Infisical Machine Identity 토큰"
-# echo ""
 
 if [ "$CREATE_FRONT" = true ]; then
   echo "════════════════════════════════════════════════════════════"

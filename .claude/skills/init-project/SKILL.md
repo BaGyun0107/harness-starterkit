@@ -24,7 +24,8 @@ description: |
   │   ├── A) 전체 초기화 (front + back)
   │   ├── B) frontend만 설정
   │   ├── C) backend만 설정
-  │   └── D) 초기환경 건너뛰기 (이미 소스 있음)
+  │   ├── D) 초기환경 건너뛰기 (이미 소스 있음)
+  │   └── E) 기존 레포 통합 (import)
   │
   ├── Step 3: 선택에 따라 스캐폴딩 실행
   │   ├── Frontend → 서브에이전트: oma-frontend 스킬 기반 초기화
@@ -94,6 +95,8 @@ options:
     description: "Express 5 + Prisma + BaseController + 미들웨어 스택 + 인증 시스템 + 유틸리티를 생성합니다"
   - label: "초기환경 건너뛰기"
     description: "이미 소스코드가 있는 경우. 바로 GitHub 레포 생성 단계로 넘어갑니다"
+  - label: "기존 레포 통합 (import)"
+    description: "이미 front/back이 별도 레포로 존재하는 경우. git subtree add로 커밋 히스토리를 보존하며 모노레포로 통합합니다"
 ```
 
 감지 결과에 따라 Recommended 표시:
@@ -377,3 +380,51 @@ fi
 - A 옵션(전체 초기화) 선택 시 front/back 서브에이전트를 **병렬로** 실행한다.
 - 이미 존재하는 디렉토리를 덮어쓰지 않는다. 존재하면 해당 스캐폴딩을 건너뛴다.
 - init-project.sh 실행 전 반드시 모든 파일을 커밋한다.
+
+## Import 모드 (E 옵션)
+
+기존에 front/back이 별도 레포로 운영 중인 경우, git subtree add로 커밋 히스토리를 보존하며 모노레포로 통합한다.
+
+### Import 플로우
+
+1. AskUserQuestion으로 기존 레포 URL을 수집한다:
+   - front 레포 URL (있으면)
+   - back 레포 URL (있으면)
+   - 각 레포의 기본 브랜치 이름 (기본: main)
+
+2. 대상 경로가 비어있는지 사전 체크한다:
+   ```bash
+   if [ -d "apps/front" ] && [ -n "$(ls -A apps/front 2>/dev/null)" ]; then
+     error "apps/front/ 가 비어있지 않습니다. import를 실행하려면 먼저 비워주세요."
+     # 사용자에게 안내 후 중단
+   fi
+   ```
+
+3. git subtree add로 소스를 가져온다 (전체 커밋 히스토리 보존):
+   ```bash
+   # front 레포 import
+   git remote add import-front {front-repo-url}
+   git fetch import-front
+   git subtree add --prefix=apps/front import-front/{branch}
+   git remote remove import-front
+
+   # back 레포 import
+   git remote add import-back {back-repo-url}
+   git fetch import-back
+   git subtree add --prefix=apps/back import-back/{branch}
+   git remote remove import-back
+   ```
+
+4. import 완료 후 기존 플로우(Step 4~6)로 진행한다:
+   - 레포 존재 여부 체크 (기존 레포를 배포 레포로 재활용할지 새로 만들지)
+   - deploy caller push
+
+### 장점
+- 기존 레포의 모든 커밋 히스토리가 모노레포에 보존됨
+- `git log -- apps/front/` 로 front 히스토리만 필터링 가능
+- `git blame`도 원래 커밋 기준으로 동작
+
+### 주의사항
+- git subtree add는 멱등하지 않음 (이미 내용이 있으면 에러)
+- 두 레포의 커밋이 git log에 시간순으로 뒤섞이지만, 경로 필터로 분리 추적 가능
+- 기존 레포의 기본 브랜치가 main이 아닐 수 있으므로 반드시 확인
