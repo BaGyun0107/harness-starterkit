@@ -1,0 +1,17 @@
+# back-* 배포 레포용 docker-compose
+# deploy workflow가 이 파일을 EC2 서버로 scp 후 docker compose up 실행
+services:
+  server:
+    image: ${REPO_NAME:-back-app}:latest
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

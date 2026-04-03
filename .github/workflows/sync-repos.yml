@@ -5,7 +5,26 @@ on:
     branches: [main, dev]
 
 jobs:
+  # ── 변경 감지 ──
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      front: ${{ steps.filter.outputs.front }}
+      back: ${{ steps.filter.outputs.back }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            front:
+              - 'apps/front/**'
+            back:
+              - 'apps/back/**'
+
   sync-front:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.front == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: sync-front-${{ github.ref }}
@@ -32,9 +51,9 @@ jobs:
           BRANCH="${{ github.ref_name }}"
           FRONT_REPO="https://x-access-token:${DEPLOY_TOKEN}@github.com/__FRONT_ORG__/front-__PROJECT__.git"
 
+          git branch -D split-front 2>/dev/null || true
           git subtree split --prefix=apps/front -b split-front
-          git push "$FRONT_REPO" split-front:$BRANCH --force-with-lease || \
-            git push "$FRONT_REPO" split-front:$BRANCH --force
+          git push "$FRONT_REPO" split-front:$BRANCH --force-with-lease
 
       - name: Notify sync result
         if: always()
@@ -49,6 +68,8 @@ jobs:
             }
 
   sync-back:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.back == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: sync-back-${{ github.ref }}
@@ -75,9 +96,9 @@ jobs:
           BRANCH="${{ github.ref_name }}"
           BACK_REPO="https://x-access-token:${DEPLOY_TOKEN}@github.com/__BACK_ORG__/back-__PROJECT__.git"
 
+          git branch -D split-back 2>/dev/null || true
           git subtree split --prefix=apps/back -b split-back
-          git push "$BACK_REPO" split-back:$BRANCH --force-with-lease || \
-            git push "$BACK_REPO" split-back:$BRANCH --force
+          git push "$BACK_REPO" split-back:$BRANCH --force-with-lease
 
       - name: Notify sync result
         if: always()

@@ -1,0 +1,131 @@
+# ── Reusable Backend Deploy Workflow ──
+# back-* 배포 레포에서 호출하는 중앙 배포 워크플로우
+# 수정 시 모든 back-* 프로젝트에 자동 반영
+name: Deploy Backend (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: '배포 환경 (production / development)'
+        required: true
+        type: string
+    secrets:
+      PRD_SERVER_HOST:
+        required: false
+      PRD_SERVER_USER:
+        required: false
+      PRD_DEPLOY_DIR:
+        required: false
+      DEV_SERVER_HOST:
+        required: false
+      DEV_SERVER_USER:
+        required: false
+      DEV_DEPLOY_DIR:
+        required: false
+      SSH_PRIVATE_KEY:
+        required: true
+      SERVER_ENV_FILE:
+        required: true
+      SLACK_WEBHOOK_URL:
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set environment variables
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            echo "DEPLOY_SERVER=${{ secrets.PRD_SERVER_HOST }}" >> $GITHUB_ENV
+            echo "DEPLOY_USER=${{ secrets.PRD_SERVER_USER }}" >> $GITHUB_ENV
+            echo "DEPLOY_DIR=${{ secrets.PRD_DEPLOY_DIR }}" >> $GITHUB_ENV
+            echo "ENV_TAG=production" >> $GITHUB_ENV
+          else
+            echo "DEPLOY_SERVER=${{ secrets.DEV_SERVER_HOST }}" >> $GITHUB_ENV
+            echo "DEPLOY_USER=${{ secrets.DEV_SERVER_USER }}" >> $GITHUB_ENV
+            echo "DEPLOY_DIR=${{ secrets.DEV_DEPLOY_DIR }}" >> $GITHUB_ENV
+            echo "ENV_TAG=development" >> $GITHUB_ENV
+          fi
+
+      # .env 파일 생성 (printf로 멀티라인 안전 처리)
+      - name: Create .env file
+        run: printf '%s' "$SERVER_ENV_FILE" > .env
+        env:
+          SERVER_ENV_FILE: ${{ secrets.SERVER_ENV_FILE }}
+
+      - name: Build Docker image
+        run: |
+          REPO_NAME="${{ github.event.repository.name }}"
+          docker build \
+            -t ${REPO_NAME}:${{ github.sha }} \
+            -t ${REPO_NAME}:latest \
+            .
+
+      - name: Save & compress Docker image
+        run: |
+          REPO_NAME="${{ github.event.repository.name }}"
+          docker save ${REPO_NAME}:latest | gzip > image.tar.gz
+
+      - name: Deploy to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ env.DEPLOY_SERVER }}
+          username: ${{ env.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: image.tar.gz,docker-compose.yml
+          target: ${{ env.DEPLOY_DIR }}
+
+      - name: Load image & restart
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.DEPLOY_SERVER }}
+          username: ${{ env.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd ${{ env.DEPLOY_DIR }}
+            # 이전 이미지 백업 (롤백용)
+            REPO_NAME="${{ github.event.repository.name }}"
+            docker tag ${REPO_NAME}:latest ${REPO_NAME}:rollback 2>/dev/null || true
+            docker load -i image.tar.gz
+            REPO_NAME=${REPO_NAME} docker compose up -d --force-recreate
+            rm -f image.tar.gz
+            echo "Backend deployed: ${{ github.sha }}"
+
+      - name: Health check
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.DEPLOY_SERVER }}
+          username: ${{ env.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            PORT="${{ secrets.SERVER_PORT }}"
+            PORT="${PORT:-8080}"
+            # 새 컨테이너 시작 대기
+            sleep 5
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              if curl -sf http://localhost:${PORT}/health > /dev/null 2>&1; then
+                echo "Health check passed (port: ${PORT}, attempt: ${i})"
+                exit 0
+              fi
+              echo "Waiting for server... (${i}/10)"
+              sleep 5
+            done
+            echo "Health check failed (port: ${PORT})"
+            echo "수동 롤백: docker tag <repo>:rollback <repo>:latest && docker compose up -d --force-recreate"
+            exit 1
+
+      - name: Notify Slack
+        if: always()
+        continue-on-error: true
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "${{ job.status == 'success' && '✅' || '❌' }} *BACKEND ${{ job.status }}* (${{ env.ENV_TAG }})\nRepo: ${{ github.repository }}\nBranch: ${{ github.ref_name }}\nCommit: `${{ github.sha }}`\nBy: ${{ github.actor }}\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+            }
