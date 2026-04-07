@@ -21,6 +21,13 @@ description: |
 - Background jobs and scheduled tasks
 - Server configuration and deployment
 
+## Working Directory Constraint
+
+**This skill ONLY creates, modifies, or deletes files within `apps/back/`.**
+- NEVER touch files in `apps/front/`, project root, or any other directory
+- Shared files (root `package.json`, `tsconfig.json`, etc.) are off-limits
+- If a change outside `apps/back/` is required, notify the user and get explicit approval first
+
 ## When NOT to use
 - Frontend UI → use oma-frontend
 - Mobile-specific code → use oma-mobile

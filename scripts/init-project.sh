@@ -206,6 +206,31 @@ if [ "$CREATE_BACK" = true ]; then
 fi
 
 # ══════════════════════════════════════════════════════════
+#  Step 1.5: 팀 권한 추가 (codi-engineers → admin)
+# ══════════════════════════════════════════════════════════
+TEAM_SLUG="codi-engineers"
+info "Step 1.5/${TOTAL_STEPS}: 팀 권한 추가 (${TEAM_SLUG} → admin)..."
+
+add_team_permission() {
+  local org="$1"
+  local repo="$2"
+  gh api -X PUT "orgs/${org}/teams/${TEAM_SLUG}/repos/${org}/${repo}" \
+    -f permission=admin --silent 2>/dev/null \
+    && info "  ${org}/${repo} ← ${TEAM_SLUG} (admin)" \
+    || warn "  ${org}/${repo} 팀 권한 추가 실패 — 수동 등록 필요"
+}
+
+add_team_permission "${BACK_ORG}" "dev-${PROJECT_NAME}"
+
+if [ "$CREATE_FRONT" = true ]; then
+  add_team_permission "${FRONT_ORG}" "front-${PROJECT_NAME}"
+fi
+
+if [ "$CREATE_BACK" = true ]; then
+  add_team_permission "${BACK_ORG}" "back-${PROJECT_NAME}"
+fi
+
+# ══════════════════════════════════════════════════════════
 #  Step 2: 플레이스홀더 치환
 # ══════════════════════════════════════════════════════════
 info "Step 2/${TOTAL_STEPS}: 워크플로우 플레이스홀더 치환..."

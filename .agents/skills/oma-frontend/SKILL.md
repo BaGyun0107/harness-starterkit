@@ -13,6 +13,13 @@ description: Frontend specialist for React, Next.js, TypeScript with FSD-lite ar
 - Form validation and user interactions
 - Integrating with backend APIs
 
+## Working Directory Constraint
+
+**This skill ONLY creates, modifies, or deletes files within `apps/front/`.**
+- NEVER touch files in `apps/back/`, project root, or any other directory
+- Shared files (root `package.json`, `tsconfig.json`, etc.) are off-limits
+- If a change outside `apps/front/` is required, notify the user and get explicit approval first
+
 ## When NOT to use
 - Backend API implementation -> use Backend Agent
 - Native mobile development -> use Mobile Agent
