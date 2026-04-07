@@ -1,0 +1,1 @@
+/Users/codiworks_dev/Desktop/codi-harness/.claude/skills/gstack/investigate/SKILL.md
