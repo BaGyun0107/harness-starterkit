@@ -2,9 +2,38 @@
 
 > oh-my-agent(도메인 스킬) + gstack(워크플로우/리뷰/배포)
 
+## Commit Convention
+
+커밋 메시지 형식: `<type>: <한글 설명>`
+
+- **description은 반드시 한글로 작성**
+- type 접두사만 영문 사용
+
+```
+feat: 로그인 페이지 구현
+fix: 토큰 만료 시 리다이렉트 안 되는 문제 수정
+chore: GitHub App 기반 배포 파이프라인 추가
+refactor: 사용자 인증 로직 분리
+docs: README 멀티레포 파이프라인 설명 추가
+```
+
+Types: feat, fix, chore, refactor, docs, style, test, perf
+
+## Language
+
+- 코드 주석: 한글
+- 커밋 메시지: 한글 (type 접두사만 영문)
+- PR/이슈 제목 및 본문: 한글
+- 변수명, 함수명, 파일명: 영문
+
 ## Architecture
 
 [ARCHITECTURE.md](ARCHITECTURE.md) — 전체 도메인 맵, 레이어 구조, 데이터 흐름
+
+### 기술 스택
+
+- **Backend**: Express 5 + Prisma (레이어: Router → Service → Repository 엄격 분리, 인증: JWT + bcrypt)
+- **Frontend**: Next.js 15 (App Router), FSD-lite (피처 간 임포트 금지), Jotai + TanStack Query, shadcn/ui + Tailwind CSS
 
 ## 레포 구조 (멀티레포 파이프라인)
 
@@ -157,6 +186,14 @@ scripts/
 templates/
   back-deploy.yml ← back-{project} 배포 워크플로우 템플릿
 ```
+
+## Boundary Rules
+
+**`.claude/skills/` 디렉토리의 파일을 읽거나 실행하지 마라.** 이 파일들은 Claude Code 전용 스킬 정의이며 Codex CLI와 무관하다. 이 파일들을 참조하면 잘못된 설정 파일(CLAUDE.md 등)을 생성할 수 있다. Codex CLI 스킬은 `.agents/skills/` 에서만 읽는다.
+
+## gstack 업그레이드 규칙
+
+`/gstack-upgrade` 실행이 완료되면, 반드시 `./scripts/sync-codex-skills.sh`를 실행하라. 이 스크립트는 Codex CLI용 gstack 스킬을 재생성한다. 이 단계를 빠뜨리면 Codex 사용자가 이전 버전의 스킬을 보게 된다.
 
 ## Quick Rules
 
