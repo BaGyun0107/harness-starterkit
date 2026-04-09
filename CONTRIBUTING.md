@@ -137,50 +137,98 @@ dev-{project} push (main/dev)
 
 ## 새 프로젝트 초기화
 
-### 1. 하네스 다운로드 + 앱 초기화
+### 방법 1: `/init-project` 스킬 사용 (권장)
+
+Claude Code에서 `/init-project`를 실행하면 대화형으로 전체 과정을 안내합니다.
 
 ```bash
-# harness zip 다운로드 후 압축 해제
+claude   # Claude Code 실행
+# 프롬프트에서 /init-project 입력
+```
+
+스킬이 현재 상태(apps/front, apps/back 존재 여부)를 감지하고 5가지 옵션을 제시합니다:
+
+| 옵션 | 설명 |
+|------|------|
+| A) 전체 초기화 | front + back 보일러플레이트 병렬 생성 |
+| B) Frontend만 | Next.js 15 + FSD-lite + shadcn/ui |
+| C) Backend만 | Express 5 + Prisma + BaseController |
+| D) 건너뛰기 | 이미 소스 있음 → 바로 레포 생성 |
+| **E) 기존 레포 통합** | **별도 레포를 `git subtree add`로 커밋 히스토리 보존하며 통합** |
+
+선택 후 프로젝트명, Organization 정보를 입력하면 `init-project.sh`까지 자동 실행됩니다.
+
+#### 기존 레포 통합 시나리오 (E 옵션)
+
+이미 front/back이 별도 레포로 운영 중인 경우:
+
+```
+/init-project
+  → E) 기존 레포 통합 선택
+  → 기존 레포 URL + 브랜치 입력
+  → git subtree add로 apps/front/ 또는 apps/back/에 통합 (히스토리 보존)
+  → 레포 생성 + 시크릿 등록 + push
+  → sync-repos.yml 트리거 → 배포 레포에 소스 동기화
+```
+
+- `git log -- apps/back/` 으로 기존 커밋 히스토리 필터링 가능
+- `git blame`도 원래 커밋 기준으로 동작
+
+### 방법 2: 수동 실행
+
+#### 1. 하네스 다운로드 + 앱 초기화
+
+```bash
 mkdir my-project && cd my-project
 
 # Frontend 초기화
 npx create-next-app@latest apps/front --typescript --tailwind --eslint --app --src-dir --use-npm
-rm -rf apps/front/.git  # create-next-app이 만든 .git 제거
+rm -rf apps/front/.git
 
 # Backend 초기화
 cd apps/back
 npm init -y
 npm install express@5 prisma @prisma/client
 npm install -D typescript @types/node @types/express ts-node
-# src/server.ts, tsconfig.json 등 생성
 ```
 
-### 2. Git 초기화
+#### 2. 기존 레포 통합 (해당되는 경우)
+
+이미 별도 레포에 소스가 있으면 subtree add로 히스토리를 보존하며 통합:
 
 ```bash
-cd my-project  # 프로젝트 루트
+cd my-project
+git subtree add --prefix=apps/back https://github.com/org/back-my-app.git main
+git subtree add --prefix=apps/front https://github.com/org/front-my-app.git main
+```
+
+#### 3. Git 초기화
+
+```bash
+cd my-project
 git init -b main
 git add -A
 git commit -m "chore: initial commit"
 ```
 
-### 3. init-project.sh 실행
+#### 4. init-project.sh 실행
 
 ```bash
-./scripts/init-project.sh <project-name> <front-org> <back-org>
-
-# 예시:
-./scripts/init-project.sh my-app your-front-org your-back-org
+# 모드에 따라 필요한 레포만 생성
+./scripts/init-project.sh my-app --mode full --front-org <front-org> --back-org <back-org>
+./scripts/init-project.sh my-app --mode front-only --front-org <front-org> --back-org <back-org>
+./scripts/init-project.sh my-app --mode back-only --back-org <back-org>
 ```
 
 스크립트가 자동으로:
-- GitHub 레포 3개 생성 (dev-/front-/back-)
+- GitHub 레포 생성 (dev- + 선택된 배포 레포)
+- codi-engineers 팀 admin 권한 부여
 - sync-repos.yml 플레이스홀더 치환
 - GitHub App 시크릿(APP_ID, APP_PRIVATE_KEY) 자동 등록
+- back-{project}에 deploy.yml 워크플로우 push
 - Git remote + main/dev 브랜치 설정 및 push
-- 첫 push로 sync-repos.yml 트리거 → 배포 레포에 코드 동기화
 
-### 4. 수동 설정
+### 수동 설정 (공통)
 
 | 작업 | 대상 레포 | 설명 |
 |------|----------|------|
@@ -191,7 +239,7 @@ git commit -m "chore: initial commit"
 | SERVER_ENV_FILE | back-{project} | 백엔드 .env 파일 내용 |
 | Vercel 연결 | front-{project} | Vercel 대시보드 → New Project → 레포 연결 |
 
-### 5. 개발 시작
+### 개발 시작
 
 ```bash
 # 코드 수정 후 push하면 자동으로:
