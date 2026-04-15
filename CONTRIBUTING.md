@@ -12,13 +12,13 @@ dev               ← 개발계 (Development) — 자동 배포
 
 ## Branch Rules
 
-| Branch | 용도 | 배포 대상 | 보호 |
-|--------|------|----------|------|
-| `main` | 운영 릴리스 | Production | PR 필수, CI 통과 |
-| `dev` | 통합 테스트 | Development | CI 통과 |
-| `feat/*` | 기능 개발 | - | - |
-| `fix/*` | 버그 수정 | - | - |
-| `hotfix/*` | 긴급 수정 | - | - |
+| Branch     | 용도        | 배포 대상   | 보호             |
+| ---------- | ----------- | ----------- | ---------------- |
+| `main`     | 운영 릴리스 | Production  | PR 필수, CI 통과 |
+| `dev`      | 통합 테스트 | Development | CI 통과          |
+| `feat/*`   | 기능 개발   | -           | -                |
+| `fix/*`    | 버그 수정   | -           | -                |
+| `hotfix/*` | 긴급 수정   | -           | -                |
 
 ## 개발 흐름
 
@@ -31,7 +31,7 @@ git checkout -b feat/my-feature
 
 # 작업 후
 git add <files>
-git commit -m "feat: add my feature"
+git commit -m "feat: 내 기능 추가"
 git push -u origin feat/my-feature
 
 # GitHub에서 dev 브랜치로 PR 생성
@@ -41,7 +41,7 @@ git push -u origin feat/my-feature
 
 ```bash
 # dev → main PR 생성 (GitHub)
-# 리뷰 + CI 통과 후 머지 → 자동 동기화 → 자동 배포
+# 리뷰 + CI 통과 후 머지 → 자동 배포
 # 릴리스 태그 생성
 git tag v1.0.0
 git push origin v1.0.0
@@ -80,27 +80,46 @@ Types:
 예시:
   feat: 로그인 페이지 구현
   fix: 토큰 만료 시 리다이렉트 안 되는 문제 수정
-  chore: GitHub App 기반 배포 파이프라인 추가
+  chore: GitHub Actions 배포 파이프라인 추가
 ```
 
 **description은 한글로 작성합니다.** type 접두사만 영문, 설명은 한글.
 
 ## Local Development
 
+### 사전 준비 (최초 1회)
+
+```bash
+# Infisical CLI 설치
+brew install infisical/get-cli/infisical
+
+# Infisical 로그인 (도메인 필수)
+infisical login --domain=https://env.co-di.com
+```
+
+### 실행
+
 ```bash
 # Backend
 cd apps/back
 npm install
 npm run dev          # http://localhost:8080
+                     # 내부적으로 infisical run --env=dev --path=/backend -- tsx watch ...
 
 # Frontend
 cd apps/front
 npm install
 npm run dev          # http://localhost:3000
+                     # 내부적으로 infisical run --env=dev --path=/frontend -- next dev
+```
 
-# Docker (전체)
-cd docker
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+### Infisical 없이 실행 (긴급 시)
+
+`.env.local` 파일을 수동으로 만들고:
+
+```bash
+cd apps/back
+npm run dev:no-infisical
 ```
 
 ## CI/CD Pipeline
@@ -108,32 +127,38 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ### 전체 흐름
 
 ```
-dev-{project} push (main/dev)
+dev-{project} push (main 또는 dev)
   │
-  ├── sync-repos.yml
-  │   ├── GitHub App 토큰 자동 발급
-  │   ├── git subtree split --prefix=apps/front → front-{project}
-  │   └── git subtree split --prefix=apps/back  → back-{project}
+  ├── apps/front/** 변경 시
+  │   └── deploy-frontend.yml
+  │        ├── Infisical에서 VERCEL_TOKEN / ORG_ID / PROJECT_ID 조회
+  │        ├── vercel pull → build → deploy
+  │        └── Slack 알림 (start/end)
   │
-  ├── front-{project} push
-  │   └── Vercel 자동 배포 (Git Integration)
-  │       ├── main → Production
-  │       └── dev  → Preview
-  │
-  └── back-{project} push
-      └── deploy.yml (GitHub Actions)
-          ├── Docker 이미지 빌드
-          ├── SCP → 배포 서버 전송
-          ├── docker compose up
-          ├── Health check
-          └── Slack 알림
+  └── apps/back/** 변경 시
+      └── deploy-backend.yml
+           ├── Infisical에서 BACK_* 조회 (SSH, 서버 정보)
+           ├── Infisical에서 런타임 .env 조회 → .env.${env} 생성
+           ├── npm ci → prisma generate → build → tar.gz
+           ├── SCP → 서버 쉘스크립트 (PM2 restart)
+           └── Slack 알림 (start/end)
 ```
 
 ### 배포 환경
 
 - `main` push → **production** 배포
 - `dev` push → **development** 배포
-- `feat/*`, `fix/*` → 배포 없음 (dev-{project} 레포에서만 개발)
+- `feat/*`, `fix/*` → 배포 없음 (dev 레포에서만 개발)
+
+### 변경 감지 (독립 배포)
+
+`paths` 필터를 사용해 변경된 앱만 배포합니다:
+
+- `apps/front/**`만 변경 → deploy-frontend.yml만 실행
+- `apps/back/**`만 변경 → deploy-backend.yml만 실행
+- 둘 다 변경 → 두 워크플로우 동시 실행
+
+`.github/workflows/deploy-*.yml` 자체가 변경되면 해당 워크플로우만 트리거됩니다.
 
 ## 새 프로젝트 초기화
 
@@ -148,15 +173,15 @@ claude   # Claude Code 실행
 
 스킬이 현재 상태(apps/front, apps/back 존재 여부)를 감지하고 5가지 옵션을 제시합니다:
 
-| 옵션 | 설명 |
-|------|------|
-| A) 전체 초기화 | front + back 보일러플레이트 병렬 생성 |
-| B) Frontend만 | Next.js 15 + FSD-lite + shadcn/ui |
-| C) Backend만 | Express 5 + Prisma + BaseController |
-| D) 건너뛰기 | 이미 소스 있음 → 바로 레포 생성 |
+| 옵션                  | 설명                                                            |
+| --------------------- | --------------------------------------------------------------- |
+| A) 전체 초기화        | front + back 보일러플레이트 병렬 생성                           |
+| B) Frontend만         | Next.js 15 + FSD-lite + shadcn/ui                               |
+| C) Backend만          | Express 5 + Prisma + BaseController                             |
+| D) 건너뛰기           | 이미 소스 있음 → 바로 레포 생성                                 |
 | **E) 기존 레포 통합** | **별도 레포를 `git subtree add`로 커밋 히스토리 보존하며 통합** |
 
-선택 후 프로젝트명, Organization 정보를 입력하면 `init-project.sh`까지 자동 실행됩니다.
+선택 후 프로젝트명, Infisical Project ID, Machine Identity 값을 입력하면 `init-project.sh`까지 자동 실행됩니다.
 
 #### 기존 레포 통합 시나리오 (E 옵션)
 
@@ -167,8 +192,9 @@ claude   # Claude Code 실행
   → E) 기존 레포 통합 선택
   → 기존 레포 URL + 브랜치 입력
   → git subtree add로 apps/front/ 또는 apps/back/에 통합 (히스토리 보존)
-  → 레포 생성 + 시크릿 등록 + push
-  → sync-repos.yml 트리거 → 배포 레포에 소스 동기화
+  → Infisical 프로젝트 연결
+  → dev-{project} 레포 생성 + push
+  → GitHub Actions가 변경된 앱 자동 배포
 ```
 
 - `git log -- apps/back/` 으로 기존 커밋 히스토리 필터링 가능
@@ -194,143 +220,129 @@ npm install -D typescript @types/node @types/express ts-node
 
 #### 2. 기존 레포 통합 (해당되는 경우)
 
-이미 별도 레포에 소스가 있으면 subtree add로 히스토리를 보존하며 통합:
-
 ```bash
 cd my-project
 git subtree add --prefix=apps/back https://github.com/org/back-my-app.git main
 git subtree add --prefix=apps/front https://github.com/org/front-my-app.git main
 ```
 
-#### 3. Git 초기화
+#### 3. Infisical 프로젝트 연결
 
 ```bash
-cd my-project
+cd apps/back && infisical init
+cd ../front && infisical init
+cd ..
+```
+
+각각 `.infisical.json`이 생성됩니다.
+
+#### 4. Git 초기화
+
+```bash
 git init -b main
 git add -A
 git commit -m "chore: initial commit"
 ```
 
-#### 4. init-project.sh 실행
+#### 5. init-project.sh 실행
 
 ```bash
-# 모드에 따라 필요한 레포만 생성
-./scripts/init-project.sh my-app --mode full --front-org <front-org> --back-org <back-org>
-./scripts/init-project.sh my-app --mode front-only --front-org <front-org> --back-org <back-org>
-./scripts/init-project.sh my-app --mode back-only --back-org <back-org>
+# Machine Identity 값을 미리 export
+export INFISICAL_PROJECT_ID="<project-id>"
+export INFISICAL_CLIENT_ID="<client-id>"
+export INFISICAL_CLIENT_SECRET="<client-secret>"
+
+./scripts/init-project.sh my-app
 ```
 
 스크립트가 자동으로:
-- GitHub 레포 생성 (dev- + 선택된 배포 레포)
+
+- GitHub 레포 `dev-my-app` 생성
 - codi-engineers 팀 admin 권한 부여
-- sync-repos.yml 플레이스홀더 치환
-- GitHub App 시크릿(APP_ID, APP_PRIVATE_KEY) 자동 등록
-- back-{project}에 deploy.yml 워크플로우 push
+- GitHub Secrets `INFISICAL_CLIENT_ID`, `INFISICAL_CLIENT_SECRET` 등록
 - Git remote + main/dev 브랜치 설정 및 push
 
 ### 수동 설정 (공통)
 
-| 작업 | 대상 레포 | 설명 |
-|------|----------|------|
-| SLACK_WEBHOOK_URL | dev-{project} | Slack 동기화 알림 |
-| SSH_PRIVATE_KEY | back-{project} | 배포 서버 SSH 키 |
-| SLACK_WEBHOOK_URL | back-{project} | Slack 배포 알림 |
-| 서버 환경 시크릿 | back-{project} | DEV/PRD_SERVER_HOST, USER, DEPLOY_DIR 등 |
-| SERVER_ENV_FILE | back-{project} | 백엔드 .env 파일 내용 |
-| Vercel 연결 | front-{project} | Vercel 대시보드 → New Project → 레포 연결 |
+| 작업                           | 대상                        | 설명                                             |
+| ------------------------------ | --------------------------- | ------------------------------------------------ |
+| Infisical 시크릿 입력          | `/backend/`                 | 백엔드 런타임 .env 값                            |
+| Infisical 시크릿 입력          | `/backend/github-actions/`  | BACK\_\* 배포 변수                               |
+| Infisical 시크릿 입력          | `/frontend/`                | Vercel로 자동 동기화될 값                        |
+| Infisical 시크릿 입력          | `/frontend/github-actions/` | VERCEL_ORG_ID, VERCEL_PROJECT_ID                 |
+| Vercel 연결                    | Vercel 대시보드             | `dev-my-app` 레포 import, Root Directory `./`    |
+| Vercel Git Disconnect          | Vercel Settings             | GitHub Actions로 배포하므로 Git Integration 해제 |
+| Infisical → Vercel Integration | Infisical UI                | `/frontend/` 경로 자동 동기화 (권장)             |
+| 배포 서버 준비                 | 서버                        | Node.js, PM2, SSH authorized_keys에 공개키 등록  |
 
 ### 개발 시작
 
 ```bash
-# 코드 수정 후 push하면 자동으로:
-# 1. sync-repos.yml → front-/back- 레포에 동기화
-# 2. Vercel → 프론트 자동 배포
-# 3. back-{project}/deploy.yml → 백엔드 자동 배포
-git push origin main
+# 코드 수정 후 push하면 paths 필터가 변경된 앱만 자동 배포
+git push origin dev   # → development 환경
+git push origin main  # → production 환경
 ```
-
-## GitHub App (repo-sync)
-
-cross-org push를 위해 GitHub App을 사용합니다. PAT와 달리 만료가 없고 매 실행마다 토큰을 자동 발급합니다.
-
-| 항목 | 값 |
-|------|-----|
-| App 이름 | repo-sync |
-| 권한 | Contents: Read and write |
-| 설치된 Org | your-front-org, your-back-org |
-
-`.pem` 파일이 필요합니다:
-- 기본 경로: 프로젝트 루트 `codi-repo-sync.private-key.pem` (.gitignore에 포함)
-- 또는: `GITHUB_APP_PEM=/path/to/key.pem ./scripts/init-project.sh ...`
 
 ## GitHub Secrets 정리
 
-### dev-{project} 레포 (자동 등록)
+**모든 프로젝트에서 동일 — 오직 2개:**
 
-| Secret | 등록 방식 | 설명 |
-|--------|----------|------|
-| `APP_ID` | init-project.sh 자동 | GitHub App ID |
-| `APP_PRIVATE_KEY` | init-project.sh 자동 | GitHub App private key |
+| Secret                    | 설명                                          |
+| ------------------------- | --------------------------------------------- |
+| `INFISICAL_CLIENT_ID`     | Universal Auth Machine Identity Client ID     |
+| `INFISICAL_CLIENT_SECRET` | Universal Auth Machine Identity Client Secret |
 
-### dev-{project} 레포 (수동 등록)
+나머지 모든 시크릿(SSH 키, Slack, 서버 정보, .env 등)은 **Infisical에서 관리**합니다.
 
-| Secret | 설명 |
-|--------|------|
-| `SLACK_WEBHOOK_URL` | Slack 동기화 알림 (선택) |
+## Infisical 시크릿 경로 구조
 
-### back-{project} 레포 (수동 등록)
+```
+프로젝트 {project}
+├── dev 환경
+│   ├── /backend/
+│   │   ├── DATABASE_URL
+│   │   ├── JWT_SECRET
+│   │   └── ...
+│   ├── /backend/github-actions/
+│   │   ├── BACK_SERVER_HOST
+│   │   ├── BACK_SERVER_USER
+│   │   ├── BACK_DEPLOY_DIR
+│   │   ├── BACK_SHELL_FILE
+│   │   ├── BACK_TAR_FILE
+│   │   └── BACK_SSH_PRIVATE_KEY
+│   ├── /frontend/
+│   │   └── NEXT_PUBLIC_* 등
+│   └── /frontend/github-actions/
+│       ├── VERCEL_ORG_ID
+│       └── VERCEL_PROJECT_ID
+└── prod 환경 (동일 구조, 운영 값)
 
-| Secret | 설명 |
-|--------|------|
-| `SSH_PRIVATE_KEY` | 배포 서버 SSH 접근 키 |
-| `SLACK_WEBHOOK_URL` | Slack 배포 알림 (선택) |
-
-### back-{project} Environment Secrets
-
-GitHub Settings → Environments에서 `development`, `production` 환경 생성 후 설정:
-
-| Secret | 설명 | 예시 |
-|--------|------|------|
-| `DEV_SERVER_HOST` | 개발 서버 IP | `10.0.10.22` |
-| `DEV_SERVER_USER` | 개발 서버 SSH 유저 | `rocky` |
-| `DEV_DEPLOY_DIR` | 배포 디렉터리 경로 | `/home/rocky/my-app` |
-| `PRD_SERVER_HOST` | 운영 서버 IP | `10.0.10.10` |
-| `PRD_SERVER_USER` | 운영 서버 SSH 유저 | `rocky` |
-| `PRD_DEPLOY_DIR` | 배포 디렉터리 경로 | `/home/rocky/my-app` |
-| `SERVER_ENV_FILE` | 백엔드 `.env` 파일 내용 | `DATABASE_URL=mysql://...` |
-
-## 서버 사전 준비
-
-배포 대상 서버에 Docker가 설치되어 있어야 합니다:
-
-```bash
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-docker compose version
+Shared-Secrets (여러 프로젝트 공용)
+├── /slack/
+│   ├── slack_bot_token
+│   └── slack_channel
+└── /vercel/
+    └── VERCEL_TOKEN
 ```
 
-## Docker 운영 명령어
+**Machine Identity 권한**: `ci-{project}-deploy` 식별자를 해당 프로젝트와 `Shared-Secrets` 프로젝트 모두에 Read 권한으로 추가.
+
+## 서버 사전 준비 (배포 대상)
 
 ```bash
-cd /home/rocky/my-app
+# Node.js 24 설치 (nvm 또는 nodesource)
+curl -fsSL https://rpm.nodesource.com/setup_24.x | sudo bash -
+sudo dnf install -y nodejs
 
-# 상태 확인
-docker compose ps
-docker stats
+# PM2 설치
+npm install -g pm2
 
-# 로그
-docker logs my-app-back-1 --tail 100
-docker logs my-app-back-1 -f
+# SSH 공개키 등록
+echo "ssh-ed25519 AAAAC3..." >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
 
-# 재시작
-docker compose restart
-
-# 중지 / 시작
-docker compose stop
-docker compose up -d
-
-# 이미지 정리
-docker image prune -f
+# 배포 쉘스크립트 위치
+# ~/deploy-{project}-{env}.sh 가 Infisical의 BACK_SHELL_FILE로 지정됨
 ```
 
 ## Directory Structure
@@ -338,26 +350,19 @@ docker image prune -f
 ```
 dev-{project}/
 ├── apps/
-│   ├── front/              # Next.js 15 (→ front-{project}로 동기화)
-│   └── back/               # Express 5 + Prisma (→ back-{project}로 동기화)
+│   ├── front/              # Next.js 15
+│   │   └── .infisical.json
+│   └── back/               # Express 5 + Prisma
+│       └── .infisical.json
 ├── .github/workflows/
-│   ├── sync-repos.yml      # subtree split → 배포 레포 push
-│   └── deploy.yml          # 로컬 Docker 빌드/배포 (레거시)
-├── docker/                 # Docker 설정 (로컬 개발용)
-├── scripts/                # 초기화, Git hooks
-├── templates/              # 배포 레포 워크플로우 템플릿
+│   ├── deploy-frontend.yml # apps/front/** 변경 시 Vercel CLI 배포
+│   └── deploy-backend.yml  # apps/back/** 변경 시 SSH/PM2 배포
+├── scripts/
+│   └── init-project.sh     # 프로젝트 초기화
 ├── .agents/                # AI 에이전트 스킬
 ├── .claude/                # Claude Code 설정
 ├── docs/                   # 문서
-├── .infisical.json         # Infisical 프로젝트 연결 (TODO)
+├── CLAUDE.md               # 프로젝트 규칙 (AI가 읽음)
 ├── CONTRIBUTING.md         # 이 파일
 └── README.md
 ```
-
-## TODO
-
-- [ ] Infisical 셀프호스팅 서버 구축
-- [ ] .pem 파일을 Infisical에 보관
-- [ ] SLACK_WEBHOOK_URL을 Infisical에서 관리
-- [ ] CI/CD에서 GitHub Secrets → Infisical 전환
-- [ ] 로컬 개발 `infisical run -- npm run dev` 전환

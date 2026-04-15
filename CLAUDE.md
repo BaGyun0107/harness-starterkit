@@ -10,9 +10,9 @@
 ```
 feat: 로그인 페이지 구현
 fix: 토큰 만료 시 리다이렉트 안 되는 문제 수정
-chore: GitHub App 기반 배포 파이프라인 추가
+chore: GitHub Actions 배포 파이프라인 추가
 refactor: 사용자 인증 로직 분리
-docs: README 멀티레포 파이프라인 설명 추가
+docs: README 모노레포 배포 설명 추가
 ```
 
 Types: feat, fix, chore, refactor, docs, style, test, perf
@@ -26,11 +26,11 @@ Types: feat, fix, chore, refactor, docs, style, test, perf
 
 ## Architecture
 
-- 개발은 `dev-{project}` 모노레포에서 진행
+- 모노레포 1개(`dev-{project}`)에서 frontend + backend 관리
 - `apps/front/` → Next.js 15 (App Router)
 - `apps/back/` → Express 5 + Prisma
-- main/dev push 시 `sync-repos.yml`이 자동으로 배포 레포에 동기화
-- **배포 레포(front-/back-)를 직접 수정하지 않는다**
+- GitHub Actions의 `paths` 필터로 변경된 앱만 독립 배포
+- **프론트/백엔드는 각각 독립 배포** — 한쪽 변경이 다른 쪽을 트리거하지 않음
 
 ## Backend
 
@@ -44,39 +44,66 @@ Types: feat, fix, chore, refactor, docs, style, test, perf
 - 상태: Jotai + TanStack Query
 - UI: shadcn/ui + Tailwind CSS
 
+## 시크릿 관리 (Infisical)
+
+- GitHub Secrets: **`INFISICAL_CLIENT_ID`, `INFISICAL_CLIENT_SECRET` 2개만**
+- 나머지 모든 시크릿은 Infisical (https://env.co-di.com) 에서 관리
+- 로컬 개발: `infisical login --domain=https://env.co-di.com` 후 `npm run dev`
+- `npm run dev`는 내부적으로 `infisical run --env=dev --path=/{backend|frontend}`로 래핑됨
+
+### Infisical 경로
+
+| 경로                        | 용도                                                        |
+| --------------------------- | ----------------------------------------------------------- |
+| `/backend/`                 | 백엔드 런타임 .env (DATABASE_URL, JWT_SECRET 등)            |
+| `/backend/github-actions/`  | 배포 변수 (BACK_SERVER_HOST, BACK_SSH_PRIVATE_KEY 등)       |
+| `/frontend/`                | 프론트 런타임 env (NEXT*PUBLIC*\* 등, Vercel로 자동 동기화) |
+| `/frontend/github-actions/` | Vercel 배포 변수 (VERCEL_ORG_ID, VERCEL_PROJECT_ID)         |
+| Shared-Secrets `/slack/`    | slack_bot_token, slack_channel                              |
+| Shared-Secrets `/vercel/`   | VERCEL_TOKEN                                                |
+
 ## 도구 역할 분담
 
 ### 워크플로우 (gstack)
 
-| 명령어 | 역할 | 언제 사용 |
-|--------|------|----------|
-| `/office-hours` | 아이디어 검증, 전제 검증 | 새 기능/구조 설계 전 |
-| `/autoplan` | 플랜 작성 (CEO→Design→Eng 리뷰) | 구현 시작 전 |
-| `/ship` | 커밋 + PR 생성 | 코드 완성 후 |
-| `/review` | 코드 리뷰 | PR 전 셀프 리뷰 |
-| `/investigate` | 버그 근본 원인 조사 | 버그 발생 시 |
-| `/qa` | 브라우저 QA 자동화 | UI 변경 후 |
-| `/design-review` | 디자인/UX 리뷰 | UI 컴포넌트 작업 후 |
-| `/learn` | 프로젝트 학습 관리 | 세션 간 컨텍스트 유지 |
+| 명령어           | 역할                            | 언제 사용             |
+| ---------------- | ------------------------------- | --------------------- |
+| `/office-hours`  | 아이디어 검증, 전제 검증        | 새 기능/구조 설계 전  |
+| `/autoplan`      | 플랜 작성 (CEO→Design→Eng 리뷰) | 구현 시작 전          |
+| `/ship`          | 커밋 + PR 생성                  | 코드 완성 후          |
+| `/review`        | 코드 리뷰                       | PR 전 셀프 리뷰       |
+| `/investigate`   | 버그 근본 원인 조사             | 버그 발생 시          |
+| `/qa`            | 브라우저 QA 자동화              | UI 변경 후            |
+| `/design-review` | 디자인/UX 리뷰                  | UI 컴포넌트 작업 후   |
+| `/learn`         | 프로젝트 학습 관리              | 세션 간 컨텍스트 유지 |
 
 ### 도메인 스킬 (oh-my-agent)
 
-| 스킬 | 담당 영역 | 작업 대상 |
-|------|----------|----------|
-| `oma-backend` | API, 인증, 미들웨어, 비즈니스 로직 | `apps/back/` |
-| `oma-frontend` | React, Next.js, Tailwind, 컴포넌트 | `apps/front/` |
-| `oma-db` | 스키마, 마이그레이션, ERD, 쿼리 최적화 | `apps/back/prisma/` |
-| `oma-qa` | 보안 감사, 성능 분석, 접근성 검사 | 전체 |
-| `oma-translator` | 다국어 번역, 톤/스타일 보존 | UI 문자열 |
+| 스킬             | 담당 영역                              | 작업 대상           |
+| ---------------- | -------------------------------------- | ------------------- |
+| `oma-backend`    | API, 인증, 미들웨어, 비즈니스 로직     | `apps/back/`        |
+| `oma-frontend`   | React, Next.js, Tailwind, 컴포넌트     | `apps/front/`       |
+| `oma-db`         | 스키마, 마이그레이션, ERD, 쿼리 최적화 | `apps/back/prisma/` |
+| `oma-qa`         | 보안 감사, 성능 분석, 접근성 검사      | 전체                |
+| `oma-translator` | 다국어 번역, 톤/스타일 보존            | UI 문자열           |
 
 ## 배포 파이프라인
 
 ```
-git push origin main
-  └── sync-repos.yml
-      ├── actions/create-github-app-token → 토큰 자동 발급
-      ├── git subtree split --prefix=apps/front → front-{project} (Vercel 자동 배포)
-      └── git subtree split --prefix=apps/back  → back-{project} (Docker+SCP 배포)
+git push origin main|dev
+  │
+  ├── apps/front/** 변경 시
+  │   └── deploy-frontend.yml
+  │        ├── Infisical: VERCEL_TOKEN + ORG/PROJECT_ID 조회
+  │        ├── vercel pull → build → deploy (apps/front 작업 디렉터리)
+  │        └── Slack 알림
+  │
+  └── apps/back/** 변경 시
+      └── deploy-backend.yml
+           ├── Infisical: BACK_* + 런타임 .env 조회
+           ├── npm ci → prisma generate → build → tar.gz
+           ├── SCP → 서버 → 쉘스크립트 실행 (PM2 restart)
+           └── Slack 알림
 ```
 
 ## Project Structure
@@ -87,14 +114,15 @@ git push origin main
 .claude/          ← Claude Code 설정
   skills/         ← gstack(워크플로우) + oma 심링크
 apps/
-  front/          ← Next.js 15 → front-{project}로 동기화
-  back/           ← Express 5 + Prisma → back-{project}로 동기화
+  front/          ← Next.js 15
+    .infisical.json
+  back/           ← Express 5 + Prisma
+    .infisical.json
 .github/workflows/
-  sync-repos.yml  ← subtree split → 배포 레포 push
+  deploy-frontend.yml   ← apps/front/** 변경 시 Vercel CLI 배포
+  deploy-backend.yml    ← apps/back/** 변경 시 SSH/PM2 배포
 scripts/
-  init-project.sh ← 프로젝트 초기화 (레포 생성 + 시크릿 등록)
-templates/
-  back-deploy.yml ← back-{project} 배포 워크플로우 템플릿
+  init-project.sh ← 프로젝트 초기화 (dev 레포 1개 + Infisical)
 ```
 
 ## Boundary Rules
@@ -107,7 +135,8 @@ templates/
 
 ## Quick Rules
 
-1. **배포 레포 직접 수정 금지** — dev-{project}에서만 작업, 동기화는 자동
-2. **백엔드 레이어 엄격 분리**: Controller → Service → Repository
-3. **프론트엔드 경계**: FSD-lite (피처 간 임포트 금지)
-4. **oma-backend는 `apps/back/`에서만**, **oma-frontend는 `apps/front/`에서만** 작업
+1. **백엔드 레이어 엄격 분리**: Controller → Service → Repository
+2. **프론트엔드 경계**: FSD-lite (피처 간 임포트 금지)
+3. **oma-backend는 `apps/back/`에서만**, **oma-frontend는 `apps/front/`에서만** 작업
+4. **시크릿 추가/변경은 Infisical에서만** — GitHub Secrets는 `INFISICAL_CLIENT_ID/SECRET` 외 건드리지 않음
+5. **로컬 개발 전에 `infisical login --domain=https://env.co-di.com` 실행**

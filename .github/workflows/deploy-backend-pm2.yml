@@ -1,0 +1,262 @@
+# ── Backend Deploy Workflow (PM2 / Monorepo Direct + Infisical) ──
+# dev-{project} 모노레포에서 apps/back/ 변경 시 직접 배포 (PM2 방식)
+# 모든 시크릿은 Infisical에서 런타임 조회
+# GitHub Secrets: INFISICAL_CLIENT_ID / INFISICAL_CLIENT_SECRET 두 개만 사용
+#
+# 프로젝트당 PM2 또는 Docker 배포 방식 중 **하나만** 활성화되어야 한다.
+# Docker 방식으로 전환하려면:
+#  1. 이 파일의 on: push 블록을 주석 처리 (workflow_dispatch만 남기기)
+#  2. deploy-backend-docker.yml 의 on: push 블록을 활성화
+name: Deploy Backend (PM2)
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - 'apps/back/**'
+      - '.github/workflows/deploy-backend-pm2.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '배포 환경'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - production
+
+# 같은 브랜치에 연속 push 시 이전 배포 취소
+concurrency:
+  group: deploy-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  INFISICAL_API_URL: https://env.co-di.com
+  INFISICAL_PROJECT_ID: 8c2a354e-1dea-4a0c-bb74-5d249e3580b9
+  SHARED_PROJECT_ID: 7b0a2f95-2d6b-4510-a6b7-029b2f8dfe10
+  NODE_VERSION: '24'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || (github.ref_name == 'main' && 'production' || 'development') }}
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Infisical CLI
+        run: |
+          curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | sudo -E bash
+          sudo apt-get update && sudo apt-get install -y infisical
+
+      - name: Determine environment
+        id: env
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ] || [ "${{ inputs.environment }}" = "production" ]; then
+            echo "infisical_env=prod" >> $GITHUB_OUTPUT
+            echo "env_file=.env.production" >> $GITHUB_OUTPUT
+          else
+            echo "infisical_env=dev" >> $GITHUB_OUTPUT
+            echo "env_file=.env.development" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Authenticate with Infisical
+        id: auth
+        env:
+          CLIENT_ID: ${{ secrets.INFISICAL_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+        run: |
+          TOKEN=$(infisical login \
+            --method=universal-auth \
+            --client-id="$CLIENT_ID" \
+            --client-secret="$CLIENT_SECRET" \
+            --domain=${{ env.INFISICAL_API_URL }} \
+            --plain --silent)
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Fetch deploy secrets (BACK_*)
+        id: deploy-secrets
+        env:
+          INFISICAL_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          # 배포용 시크릿은 /backend/github-actions 경로에서 가져온다
+          get_secret() {
+            infisical secrets get "$1" \
+              --projectId=${{ env.INFISICAL_PROJECT_ID }} \
+              --env=${{ steps.env.outputs.infisical_env }} \
+              --path=/backend/github-actions \
+              --plain \
+              --domain=${{ env.INFISICAL_API_URL }}
+          }
+
+          SERVER_HOST=$(get_secret BACK_SERVER_HOST)
+          SERVER_USER=$(get_secret BACK_SERVER_USER)
+          DEPLOY_DIR=$(get_secret BACK_DEPLOY_DIR)
+          SHELL_FILE=$(get_secret BACK_SHELL_FILE)
+          TAR_FILE=$(get_secret BACK_TAR_FILE)
+          SSH_KEY=$(get_secret BACK_SSH_PRIVATE_KEY)
+
+          echo "::add-mask::$SSH_KEY"
+
+          # 후속 step을 위해 env로 노출 (비민감값)
+          {
+            echo "BACK_SERVER_HOST=$SERVER_HOST"
+            echo "BACK_SERVER_USER=$SERVER_USER"
+            echo "BACK_DEPLOY_DIR=$DEPLOY_DIR"
+            echo "BACK_SHELL_FILE=$SHELL_FILE"
+            echo "BACK_TAR_FILE=$TAR_FILE"
+          } >> $GITHUB_ENV
+
+          # SSH 키는 step output으로 전달 (appleboy/*-action의 key 파라미터에 직접 사용)
+          {
+            echo "ssh_key<<EOF_SSH_KEY"
+            echo "$SSH_KEY"
+            echo "EOF_SSH_KEY"
+          } >> $GITHUB_OUTPUT
+
+      - name: Fetch Slack secrets (Shared-Secrets)
+        id: slack
+        env:
+          INFISICAL_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          BOT_TOKEN=$(infisical secrets get slack_bot_token \
+            --projectId=${{ env.SHARED_PROJECT_ID }} \
+            --env=${{ steps.env.outputs.infisical_env }} \
+            --path=/slack \
+            --plain \
+            --domain=${{ env.INFISICAL_API_URL }})
+          CHANNEL=$(infisical secrets get slack_channel \
+            --projectId=${{ env.SHARED_PROJECT_ID }} \
+            --env=${{ steps.env.outputs.infisical_env }} \
+            --path=/slack \
+            --plain \
+            --domain=${{ env.INFISICAL_API_URL }})
+          echo "::add-mask::$BOT_TOKEN"
+          echo "bot_token=$BOT_TOKEN" >> $GITHUB_OUTPUT
+          echo "channel=$CHANNEL" >> $GITHUB_OUTPUT
+
+      - name: Notify Slack (start)
+        continue-on-error: true
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          method: chat.postMessage
+          token: ${{ steps.slack.outputs.bot_token }}
+          payload: |
+            {
+              "channel": "${{ steps.slack.outputs.channel }}",
+              "text": "🚀 *BACKEND 배포 시작* (${{ steps.env.outputs.infisical_env }})\nRepo: ${{ github.repository }}\nBranch: ${{ github.ref_name }}\nCommit: `${{ github.sha }}`\nBy: ${{ github.actor }}\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+            }
+
+      - name: Generate backend .env file from Infisical
+        env:
+          INFISICAL_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          # /backend 경로의 런타임 시크릿을 .env 파일로 export
+          infisical export \
+            --projectId=${{ env.INFISICAL_PROJECT_ID }} \
+            --env=${{ steps.env.outputs.infisical_env }} \
+            --path=/backend \
+            --format=dotenv \
+            --domain=${{ env.INFISICAL_API_URL }} \
+            > apps/back/${{ steps.env.outputs.env_file }}
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: apps/back/node_modules
+          key: ${{ runner.os }}-back-node-${{ hashFiles('apps/back/package-lock.json') }}
+
+      - name: Install dependencies
+        working-directory: apps/back
+        run: npm ci --ignore-scripts
+
+      - name: Generate Prisma client
+        working-directory: apps/back
+        run: npx prisma generate
+
+      - name: Build
+        working-directory: apps/back
+        run: npm run build
+
+      - name: Prune dev dependencies
+        working-directory: apps/back
+        run: npm prune --production
+
+      - name: Compress build artifacts
+        working-directory: apps/back
+        run: |
+          tar -czvf "${BACK_TAR_FILE}" \
+            dist \
+            node_modules \
+            ecosystem.config.js \
+            "${{ steps.env.outputs.env_file }}" \
+            package.json \
+            prisma
+
+      - name: Create GitHub Deployment
+        id: gh-deployment
+        uses: chrnorm/deployment-action@v2
+        with:
+          token: ${{ github.token }}
+          environment: ${{ steps.env.outputs.infisical_env }}
+          description: Backend ${{ steps.env.outputs.infisical_env }} deploy
+
+      - name: Deploy to server via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ env.BACK_SERVER_HOST }}
+          username: ${{ env.BACK_SERVER_USER }}
+          key: ${{ steps.deploy-secrets.outputs.ssh_key }}
+          source: apps/back/${{ env.BACK_TAR_FILE }}
+          target: ${{ env.BACK_DEPLOY_DIR }}
+          strip_components: 2
+          timeout: 300s
+
+      - name: Run deploy script on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.BACK_SERVER_HOST }}
+          username: ${{ env.BACK_SERVER_USER }}
+          key: ${{ steps.deploy-secrets.outputs.ssh_key }}
+          command_timeout: 10m
+          script: |
+            cd ${{ env.BACK_DEPLOY_DIR }}
+            sh ${{ env.BACK_SHELL_FILE }}
+
+      - name: Update GitHub Deployment (success)
+        if: success()
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: ${{ github.token }}
+          deployment-id: ${{ steps.gh-deployment.outputs.deployment_id }}
+          state: success
+
+      - name: Update GitHub Deployment (failure)
+        if: failure()
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: ${{ github.token }}
+          deployment-id: ${{ steps.gh-deployment.outputs.deployment_id }}
+          state: failure
+
+      - name: Notify Slack
+        if: always()
+        continue-on-error: true
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          method: chat.postMessage
+          token: ${{ steps.slack.outputs.bot_token }}
+          payload: |
+            {
+              "channel": "${{ steps.slack.outputs.channel }}",
+              "text": "${{ job.status == 'success' && '✅' || '❌' }} *BACKEND ${{ job.status }}* (${{ steps.env.outputs.infisical_env }})\nRepo: ${{ github.repository }}\nBranch: ${{ github.ref_name }}\nCommit: `${{ github.sha }}`\nBy: ${{ github.actor }}\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+            }

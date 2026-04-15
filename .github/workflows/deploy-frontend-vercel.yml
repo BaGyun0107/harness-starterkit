@@ -1,0 +1,256 @@
+# ── Frontend Deploy Workflow (Vercel CLI + Infisical) ──
+# dev-{project} 모노레포에서 apps/front/ 변경 시 Vercel CLI로 직접 배포
+# Vercel Git Integration은 해제된 상태 — 이 워크플로우가 배포 유일 경로
+# 모든 시크릿은 Infisical에서 런타임 조회
+#
+# 프로젝트당 Frontend 배포 방식은 **하나만** 활성화되어야 한다.
+# PM2/Docker 방식으로 전환하려면:
+#  1. 이 파일의 on: push 블록을 주석 처리 (workflow_dispatch만 남기기)
+#  2. deploy-frontend-pm2.yml 또는 deploy-frontend-docker.yml 의 on: push 블록을 활성화
+name: Deploy Frontend (Vercel)
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - 'apps/front/**'
+      - '.github/workflows/deploy-frontend-vercel.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '배포 환경'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - production
+
+# 같은 브랜치에 연속 push 시 이전 배포 취소
+concurrency:
+  group: deploy-frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  INFISICAL_API_URL: https://env.co-di.com
+  INFISICAL_PROJECT_ID: 8c2a354e-1dea-4a0c-bb74-5d249e3580b9
+  SHARED_PROJECT_ID: 7b0a2f95-2d6b-4510-a6b7-029b2f8dfe10
+  NODE_VERSION: '24'
+  # Vercel CLI 버전 고정 (재현성 + 설치 캐시 가능)
+  VERCEL_CLI_VERSION: '48.1.1'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || (github.ref_name == 'main' && 'production' || 'development') }}
+    permissions:
+      contents: read
+      deployments: write  # GitHub Deployment 등록용
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Infisical CLI
+        run: |
+          curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | sudo -E bash
+          sudo apt-get update && sudo apt-get install -y infisical
+
+      - name: Determine environment
+        id: env
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ] || [ "${{ inputs.environment }}" = "production" ]; then
+            echo "infisical_env=prod" >> $GITHUB_OUTPUT
+            echo "vercel_env=production" >> $GITHUB_OUTPUT
+            echo "prod_flag=--prod" >> $GITHUB_OUTPUT
+          else
+            echo "infisical_env=dev" >> $GITHUB_OUTPUT
+            echo "vercel_env=preview" >> $GITHUB_OUTPUT
+            echo "prod_flag=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Authenticate with Infisical
+        id: auth
+        env:
+          CLIENT_ID: ${{ secrets.INFISICAL_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+        run: |
+          TOKEN=$(infisical login \
+            --method=universal-auth \
+            --client-id="$CLIENT_ID" \
+            --client-secret="$CLIENT_SECRET" \
+            --domain=${{ env.INFISICAL_API_URL }} \
+            --plain --silent)
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Fetch Vercel credentials
+        id: vercel-creds
+        env:
+          INFISICAL_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          # VERCEL_TOKEN은 Shared-Secrets 프로젝트 /vercel 경로에서 공용으로 조회
+          VERCEL_TOKEN=$(infisical secrets get VERCEL_TOKEN \
+            --projectId=${{ env.SHARED_PROJECT_ID }} \
+            --env=${{ steps.env.outputs.infisical_env }} \
+            --path=/vercel \
+            --plain \
+            --domain=${{ env.INFISICAL_API_URL }})
+
+          # Org ID / Project ID는 liveview 프로젝트 /frontend/github-actions 경로
+          VERCEL_ORG_ID=$(infisical secrets get VERCEL_ORG_ID \
+            --projectId=${{ env.INFISICAL_PROJECT_ID }} \
+            --env=${{ steps.env.outputs.infisical_env }} \
+            --path=/frontend/github-actions \
+            --plain \
+            --domain=${{ env.INFISICAL_API_URL }})
+
+          VERCEL_PROJECT_ID=$(infisical secrets get VERCEL_PROJECT_ID \
+            --projectId=${{ env.INFISICAL_PROJECT_ID }} \
+            --env=${{ steps.env.outputs.infisical_env }} \
+            --path=/frontend/github-actions \
+            --plain \
+            --domain=${{ env.INFISICAL_API_URL }})
+
+          echo "::add-mask::$VERCEL_TOKEN"
+          echo "token=$VERCEL_TOKEN" >> $GITHUB_OUTPUT
+          echo "org_id=$VERCEL_ORG_ID" >> $GITHUB_OUTPUT
+          echo "project_id=$VERCEL_PROJECT_ID" >> $GITHUB_OUTPUT
+
+      - name: Fetch Slack secrets
+        id: slack
+        env:
+          INFISICAL_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          BOT_TOKEN=$(infisical secrets get slack_bot_token \
+            --projectId=${{ env.SHARED_PROJECT_ID }} \
+            --env=${{ steps.env.outputs.infisical_env }} \
+            --path=/slack \
+            --plain \
+            --domain=${{ env.INFISICAL_API_URL }})
+          CHANNEL=$(infisical secrets get slack_channel \
+            --projectId=${{ env.SHARED_PROJECT_ID }} \
+            --env=${{ steps.env.outputs.infisical_env }} \
+            --path=/slack \
+            --plain \
+            --domain=${{ env.INFISICAL_API_URL }})
+          echo "::add-mask::$BOT_TOKEN"
+          echo "bot_token=$BOT_TOKEN" >> $GITHUB_OUTPUT
+          echo "channel=$CHANNEL" >> $GITHUB_OUTPUT
+
+      - name: Notify Slack (start)
+        continue-on-error: true
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          method: chat.postMessage
+          token: ${{ steps.slack.outputs.bot_token }}
+          payload: |
+            {
+              "channel": "${{ steps.slack.outputs.channel }}",
+              "text": "🚀 *FRONTEND 배포 시작* (${{ steps.env.outputs.vercel_env }})\nRepo: ${{ github.repository }}\nBranch: ${{ github.ref_name }}\nCommit: `${{ github.sha }}`\nBy: ${{ github.actor }}\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+            }
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: apps/front/node_modules
+          key: ${{ runner.os }}-front-node-${{ hashFiles('apps/front/package-lock.json') }}
+
+      - name: Cache Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: apps/front/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('apps/front/package-lock.json') }}-${{ hashFiles('apps/front/**/*.[jt]s', 'apps/front/**/*.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('apps/front/package-lock.json') }}-
+
+      - name: Install dependencies
+        working-directory: apps/front
+        run: npm ci --ignore-scripts
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@${{ env.VERCEL_CLI_VERSION }}
+
+      # Vercel 프로젝트의 Root Directory가 "./"(빈 값)이므로
+      # apps/front에서 직접 실행 → .vercel/project.json도 여기에 생성
+      - name: Pull Vercel environment info
+        working-directory: apps/front
+        env:
+          VERCEL_ORG_ID: ${{ steps.vercel-creds.outputs.org_id }}
+          VERCEL_PROJECT_ID: ${{ steps.vercel-creds.outputs.project_id }}
+        run: |
+          vercel pull --yes \
+            --environment=${{ steps.env.outputs.vercel_env }} \
+            --token=${{ steps.vercel-creds.outputs.token }}
+
+      - name: Build with Vercel
+        working-directory: apps/front
+        env:
+          VERCEL_ORG_ID: ${{ steps.vercel-creds.outputs.org_id }}
+          VERCEL_PROJECT_ID: ${{ steps.vercel-creds.outputs.project_id }}
+        run: |
+          vercel build ${{ steps.env.outputs.prod_flag }} \
+            --token=${{ steps.vercel-creds.outputs.token }}
+
+      - name: Create GitHub Deployment
+        id: gh-deployment
+        uses: chrnorm/deployment-action@v2
+        with:
+          token: ${{ github.token }}
+          environment: ${{ steps.env.outputs.vercel_env }}
+          description: Frontend ${{ steps.env.outputs.vercel_env }} deploy
+
+      - name: Deploy to Vercel
+        id: deploy
+        working-directory: apps/front
+        env:
+          VERCEL_ORG_ID: ${{ steps.vercel-creds.outputs.org_id }}
+          VERCEL_PROJECT_ID: ${{ steps.vercel-creds.outputs.project_id }}
+        run: |
+          # workflow_dispatch로 트리거 시 head_commit.message가 비어있으므로 fallback 처리
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          if [ -z "$COMMIT_MSG" ]; then
+            COMMIT_MSG="Manual deploy via workflow_dispatch"
+          fi
+          URL=$(vercel deploy --prebuilt ${{ steps.env.outputs.prod_flag }} \
+            --token=${{ steps.vercel-creds.outputs.token }} \
+            --meta githubCommitAuthor="${{ github.actor }}" \
+            --meta githubCommitSha="${{ github.sha }}" \
+            --meta githubCommitRef="${{ github.ref_name }}" \
+            --meta githubCommitMessage="$COMMIT_MSG" \
+            --meta githubRunId="${{ github.run_id }}")
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "Deployed: $URL"
+
+      - name: Update GitHub Deployment (success)
+        if: success()
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: ${{ github.token }}
+          deployment-id: ${{ steps.gh-deployment.outputs.deployment_id }}
+          environment-url: ${{ steps.deploy.outputs.url }}
+          state: success
+
+      - name: Update GitHub Deployment (failure)
+        if: failure()
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: ${{ github.token }}
+          deployment-id: ${{ steps.gh-deployment.outputs.deployment_id }}
+          state: failure
+
+      - name: Notify Slack
+        if: always()
+        continue-on-error: true
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          method: chat.postMessage
+          token: ${{ steps.slack.outputs.bot_token }}
+          payload: |
+            {
+              "channel": "${{ steps.slack.outputs.channel }}",
+              "text": "${{ job.status == 'success' && '✅' || '❌' }} *FRONTEND ${{ job.status }}* (${{ steps.env.outputs.vercel_env }})\nRepo: ${{ github.repository }}\nBranch: ${{ github.ref_name }}\nCommit: `${{ github.sha }}`\nBy: ${{ github.actor }}\nURL: ${{ steps.deploy.outputs.url }}\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+            }
