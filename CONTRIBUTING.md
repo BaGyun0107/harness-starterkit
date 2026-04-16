@@ -273,7 +273,7 @@ export INFISICAL_CLIENT_SECRET="<client-secret>"
 | Vercel 연결                    | Vercel 대시보드             | `dev-my-app` 레포 import, Root Directory `./`    |
 | Vercel Git Disconnect          | Vercel Settings             | GitHub Actions로 배포하므로 Git Integration 해제 |
 | Infisical → Vercel Integration | Infisical UI                | `/frontend/` 경로 자동 동기화 (권장)             |
-| 배포 서버 준비                 | 서버                        | Node.js, PM2, SSH authorized_keys에 공개키 등록  |
+| 배포 서버 준비                 | 서버                        | Node.js, PM2, SSH authorized_keys 등록, ~/server-deploy.sh 배치 (최초 1회) |
 
 ### 개발 시작
 
@@ -307,7 +307,7 @@ git push origin main  # → production 환경
 │   │   ├── BACK_SERVER_HOST
 │   │   ├── BACK_SERVER_USER
 │   │   ├── BACK_DEPLOY_DIR
-│   │   ├── BACK_SHELL_FILE
+│   │   ├── BACK_APP_NAME
 │   │   ├── BACK_TAR_FILE
 │   │   └── BACK_SSH_PRIVATE_KEY
 │   ├── /frontend/
@@ -329,6 +329,8 @@ Shared-Secrets (여러 프로젝트 공용)
 
 ## 서버 사전 준비 (배포 대상)
 
+### 공통 (최초 1회만)
+
 ```bash
 # Node.js 24 설치 (nvm 또는 nodesource)
 curl -fsSL https://rpm.nodesource.com/setup_24.x | sudo bash -
@@ -341,8 +343,24 @@ npm install -g pm2
 echo "ssh-ed25519 AAAAC3..." >> ~/.ssh/authorized_keys
 chmod 600 ~/.ssh/authorized_keys
 
-# 배포 쉘스크립트 위치
-# ~/deploy-{project}-{env}.sh 가 Infisical의 BACK_SHELL_FILE로 지정됨
+# 범용 배포 스크립트 배치 (최초 1회만 — 모든 프로젝트가 공유)
+scp scripts/server-deploy.sh rocky@<server>:~/server-deploy.sh
+ssh rocky@<server> "chmod +x ~/server-deploy.sh"
+```
+
+**왜 `~/server-deploy.sh` 하나인가:** 이전에는 프로젝트/환경별로 `deploy-{project}-{env}.sh`를 복사해서 `BASE_PATH`, `TAR_FILE`, `APP_NAME`을 매번 수정해 배치했다. 이제는 워크플로우가 이 값들을 **인자로 전달**하므로 스크립트는 1개만 있으면 된다.
+
+### 프로젝트별 (선택)
+
+프로젝트에 배포 후 추가 처리(예: puppeteer Chrome 설치)가 필요하면 `{BASE_PATH}/post-deploy.sh`를 배치한다. 이 파일이 존재하면 `server-deploy.sh`가 자동으로 실행한다.
+
+```bash
+# 예: liveview back-dev 서버에서
+cat > /home/rocky/CODI.live-view-back-dev/post-deploy.sh << 'EOF'
+#!/bin/bash
+# current 디렉토리에서 실행됨
+npx puppeteer browsers install chrome
+EOF
 ```
 
 ## Directory Structure

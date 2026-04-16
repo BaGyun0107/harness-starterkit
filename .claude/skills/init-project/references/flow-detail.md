@@ -524,7 +524,7 @@ B방식의 `init-project.sh`는 **단순**하다. `--mode`, `--front-org`, `--ba
   2. Infisical 시크릿 입력 (https://env.co-di.com)
      - /backend/                   런타임 .env
      - /backend/github-actions/    BACK_SERVER_HOST, BACK_SERVER_USER,
-                                   BACK_DEPLOY_DIR, BACK_SHELL_FILE,
+                                   BACK_DEPLOY_DIR, BACK_APP_NAME,
                                    BACK_TAR_FILE, BACK_SSH_PRIVATE_KEY
      - /frontend/                  NEXT_PUBLIC_*
      - /frontend/github-actions/   VERCEL_ORG_ID, VERCEL_PROJECT_ID
@@ -533,7 +533,14 @@ B방식의 `init-project.sh`는 **단순**하다. `--mode`, `--front-org`, `--ba
 
   3. Infisical → Vercel Integration (권장)
 
-  4. 배포 서버 사전 준비 (Node.js, PM2, SSH authorized_keys)
+  4. 배포 서버 사전 준비
+     - Node.js, PM2 설치 (PM2 방식)
+     - SSH authorized_keys 에 공개키 등록
+     - scripts/server-deploy.sh 를 ~/server-deploy.sh 로 배치 (최초 1회, 모든 프로젝트 공유)
+         scp scripts/server-deploy.sh rocky@<server>:~/server-deploy.sh
+         ssh rocky@<server> "chmod +x ~/server-deploy.sh"
+     - 프로젝트별 후처리가 필요하면 {BASE_PATH}/post-deploy.sh 배치
+       (예: puppeteer chrome 설치)
 
 ════════════════════════════════════════════════════════════
   개발 시작

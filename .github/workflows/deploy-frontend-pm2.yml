@@ -104,7 +104,7 @@ jobs:
           SERVER_HOST=$(get_secret FRONT_SERVER_HOST)
           SERVER_USER=$(get_secret FRONT_SERVER_USER)
           DEPLOY_DIR=$(get_secret FRONT_DEPLOY_DIR)
-          SHELL_FILE=$(get_secret FRONT_SHELL_FILE)
+          APP_NAME=$(get_secret FRONT_APP_NAME)
           TAR_FILE=$(get_secret FRONT_TAR_FILE)
           SSH_KEY=$(get_secret FRONT_SSH_PRIVATE_KEY)
 
@@ -114,7 +114,7 @@ jobs:
             echo "FRONT_SERVER_HOST=$SERVER_HOST"
             echo "FRONT_SERVER_USER=$SERVER_USER"
             echo "FRONT_DEPLOY_DIR=$DEPLOY_DIR"
-            echo "FRONT_SHELL_FILE=$SHELL_FILE"
+            echo "FRONT_APP_NAME=$APP_NAME"
             echo "FRONT_TAR_FILE=$TAR_FILE"
           } >> $GITHUB_ENV
 
@@ -214,6 +214,9 @@ jobs:
           strip_components: 2
           timeout: 300s
 
+      # 서버에는 범용 ~/server-deploy.sh 스크립트가 한 번만 배치되어 있어야 한다.
+      # (harness 의 scripts/server-deploy.sh 를 서버에 scp 한 뒤 실행 권한 부여)
+      # 프로젝트/환경별 값은 인자로 전달 → 서버 스크립트 복사/수정 불필요
       - name: Run deploy script on server
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -221,9 +224,10 @@ jobs:
           username: ${{ env.FRONT_SERVER_USER }}
           key: ${{ steps.deploy-secrets.outputs.ssh_key }}
           command_timeout: 10m
+          envs: FRONT_DEPLOY_DIR,FRONT_TAR_FILE,FRONT_APP_NAME
           script: |
-            cd ${{ env.FRONT_DEPLOY_DIR }}
-            sh ${{ env.FRONT_SHELL_FILE }}
+            ENV="${{ github.ref_name == 'main' && 'production' || 'development' }}"
+            sh ~/server-deploy.sh "${FRONT_DEPLOY_DIR}" "${FRONT_TAR_FILE}" "${FRONT_APP_NAME}" "${ENV}"
 
       - name: Update GitHub Deployment (success)
         if: success()

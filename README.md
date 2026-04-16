@@ -213,7 +213,7 @@ Infisical Project: {project}
   │   │   ├── BACK_SERVER_HOST
   │   │   ├── BACK_SERVER_USER
   │   │   ├── BACK_DEPLOY_DIR
-  │   │   ├── BACK_SHELL_FILE
+  │   │   ├── BACK_APP_NAME
   │   │   ├── BACK_TAR_FILE
   │   │   └── BACK_SSH_PRIVATE_KEY
   │   ├── /frontend/            NEXT_PUBLIC_*, ...
