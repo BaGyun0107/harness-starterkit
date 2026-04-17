@@ -1,4 +1,4 @@
-# dev-liveview
+# harness
 
 사내 공용 프로젝트 하네스. AI 에이전트 스킬, CI/CD, Git workflow, 모노레포 직접 배포 파이프라인을 포함합니다.
 
