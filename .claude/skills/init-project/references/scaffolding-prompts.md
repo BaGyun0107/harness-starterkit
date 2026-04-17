@@ -55,6 +55,11 @@ apps/front/ 에 Next.js 프로젝트를 초기화해야 한다.
    - build: "next build"
    - start: "next start"
 
+8. .env.example — 하네스 레포의 apps/front/.env.example 에 Next.js 용 미니멈
+   템플릿이 이미 배치되어 있다. 스캐폴딩 시 이 파일이 존재하는지 확인만 하고,
+   없으면 하네스 기본 템플릿을 복사한다. 프로젝트 고유 변수(예: 분석 키 등)가
+   필요하면 파일 끝에 추가한다.
+
 완료 후 npm run dev:no-infisical 로 정상 기동되는지 확인한다.
 (Infisical 미연결 상태이므로 infisical run은 Step 5 이후 동작)
 ```
@@ -124,7 +129,9 @@ apps/back/ 에 Express + Prisma 백엔드 프로젝트를 초기화해야 한다
    → 현재는 deploy-backend-docker.yml이 workflow_dispatch만 활성화되어 있으므로
      사용되지 않지만, 전환 시 즉시 활용 가능하도록 파일을 미리 배치한다.
 
-9. .env.example을 생성한다 (config-reference.md 기반).
+9. .env.example — 이미 하네스 레포의 apps/back/.env.example 에 미니멈 템플릿이 배포되어 있다.
+   스캐폴딩 후 이 파일이 존재하는지 확인만 하고, 없으면 하네스 기본 템플릿을 복사한다.
+   프로젝트 고유 변수(예: REDIS_URL, SMTP 설정 등)가 필요하면 파일 끝에 추가한다.
 
 10. package.json scripts 설정:
     - dev: "infisical run --env=dev --path=/backend -- tsx watch src/server.ts"

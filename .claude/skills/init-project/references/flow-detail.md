@@ -531,12 +531,14 @@ B방식의 `init-project.sh`는 **단순**하다. `--mode`, `--front-org`, `--ba
      - 최초 배포 후 Settings → Git → Disconnect
 
   2. Infisical 시크릿 입력 (https://env.co-di.com)
-     - /backend/                   런타임 .env
+     ⚡ 템플릿: apps/back/.env.example, apps/front/.env.example 에 최소 필요 변수가
+        정의되어 있다. 이 파일을 열어 key 목록을 참고하면서 Infisical 에 등록한다.
+     - /backend/                   런타임 .env (apps/back/.env.example 참고)
      - /backend/github-actions/    BACK_SERVER_HOST, BACK_SERVER_USER,
                                    BACK_DEPLOY_DIR, BACK_APP_NAME,
                                    BACK_TAR_FILE, BACK_SSH_PRIVATE_KEY,
                                    BACK_APP_TYPE (선택, 기본 pm2)
-     - /frontend/                  NEXT_PUBLIC_*
+     - /frontend/                  NEXT_PUBLIC_* (apps/front/.env.example 참고)
      - /frontend/github-actions/   (Vercel 배포 시)   VERCEL_ORG_ID, VERCEL_PROJECT_ID
                                    (PM2/Static 배포 시) FRONT_SERVER_HOST, FRONT_SERVER_USER,
                                                       FRONT_DEPLOY_DIR, FRONT_APP_NAME,

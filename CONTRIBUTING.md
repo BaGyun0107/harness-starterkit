@@ -266,9 +266,9 @@ export INFISICAL_CLIENT_SECRET="<client-secret>"
 
 | 작업                           | 대상                        | 설명                                             |
 | ------------------------------ | --------------------------- | ------------------------------------------------ |
-| Infisical 시크릿 입력          | `/backend/`                 | 백엔드 런타임 .env 값                            |
+| Infisical 시크릿 입력          | `/backend/`                 | 백엔드 런타임 .env 값 (템플릿: `apps/back/.env.example`) |
 | Infisical 시크릿 입력          | `/backend/github-actions/`  | BACK\_\* 배포 변수                               |
-| Infisical 시크릿 입력          | `/frontend/`                | Vercel로 자동 동기화될 값                        |
+| Infisical 시크릿 입력          | `/frontend/`                | Vercel로 자동 동기화될 값 (템플릿: `apps/front/.env.example`) |
 | Infisical 시크릿 입력          | `/frontend/github-actions/` | VERCEL_ORG_ID, VERCEL_PROJECT_ID                 |
 | Vercel 연결                    | Vercel 대시보드             | `dev-my-app` 레포 import, Root Directory `./`    |
 | Vercel Git Disconnect          | Vercel Settings             | GitHub Actions로 배포하므로 Git Integration 해제 |
