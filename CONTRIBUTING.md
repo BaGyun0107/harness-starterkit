@@ -346,12 +346,41 @@ sudo dnf install -y nodejs
 
 # PM2 설치
 npm install -g pm2
+```
 
-# SSH 공개키 등록
-echo "ssh-ed25519 AAAAC3..." >> ~/.ssh/authorized_keys
-chmod 600 ~/.ssh/authorized_keys
+### 배포용 SSH 키 생성 및 등록
 
-# 범용 배포 스크립트 배치 (최초 1회만 — 모든 프로젝트가 공유)
+프로젝트/환경별로 SSH 키를 분리하면 권한 관리가 쉽다. 하나의 키를 공유하지 말 것.
+
+```bash
+# 1. 로컬에서 키 생성 (passphrase 없이 — CI 자동 사용)
+ssh-keygen -t ed25519 -C "deploy-{project}-{env}" -f ~/.ssh/deploy-{project}-{env}
+
+# 예시:
+ssh-keygen -t ed25519 -C "deploy-myapp-dev" -f ~/.ssh/deploy-myapp-dev
+# → ~/.ssh/deploy-myapp-dev      (개인키)
+# → ~/.ssh/deploy-myapp-dev.pub  (공개키)
+
+# 2. 공개키를 배포 서버에 등록
+ssh-copy-id -i ~/.ssh/deploy-myapp-dev.pub rocky@10.0.10.22
+# 또는 수동으로:
+# cat ~/.ssh/deploy-myapp-dev.pub | ssh rocky@10.0.10.22 "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+
+# 3. 개인키를 Infisical에 등록
+#    /backend/github-actions/ → BACK_SSH_PRIVATE_KEY
+#    /frontend/github-actions/ → FRONT_SSH_PRIVATE_KEY
+cat ~/.ssh/deploy-myapp-dev   # 이 내용을 그대로 Infisical 값에 붙여넣기
+```
+
+| 파일 | 용도 | 등록 위치 |
+|------|------|----------|
+| `~/.ssh/deploy-{project}-{env}` | 개인키 | Infisical `BACK_SSH_PRIVATE_KEY` 또는 `FRONT_SSH_PRIVATE_KEY` |
+| `~/.ssh/deploy-{project}-{env}.pub` | 공개키 | 배포 서버 `~/.ssh/authorized_keys` |
+
+### 범용 배포 스크립트 배치
+
+```bash
+# 서버에 server-deploy.sh 배치 (최초 1회만 — 모든 프로젝트가 공유)
 scp scripts/server-deploy.sh rocky@<server>:~/server-deploy.sh
 ssh rocky@<server> "chmod +x ~/server-deploy.sh"
 ```
