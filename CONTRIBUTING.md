@@ -309,12 +309,22 @@ git push origin main  # → production 환경
 │   │   ├── BACK_DEPLOY_DIR
 │   │   ├── BACK_APP_NAME
 │   │   ├── BACK_TAR_FILE
-│   │   └── BACK_SSH_PRIVATE_KEY
+│   │   ├── BACK_SSH_PRIVATE_KEY
+│   │   └── BACK_APP_TYPE            # 선택 (pm2|static, 기본: pm2)
 │   ├── /frontend/
 │   │   └── NEXT_PUBLIC_* 등
 │   └── /frontend/github-actions/
+│       # Vercel 배포 시
 │       ├── VERCEL_ORG_ID
-│       └── VERCEL_PROJECT_ID
+│       ├── VERCEL_PROJECT_ID
+│       # PM2/Static 배포 시 (인스턴스 서버)
+│       ├── FRONT_SERVER_HOST
+│       ├── FRONT_SERVER_USER
+│       ├── FRONT_DEPLOY_DIR
+│       ├── FRONT_APP_NAME
+│       ├── FRONT_TAR_FILE
+│       ├── FRONT_SSH_PRIVATE_KEY
+│       └── FRONT_APP_TYPE            # pm2 (Next SSR) | static (React SPA)
 └── prod 환경 (동일 구조, 운영 값)
 
 Shared-Secrets (여러 프로젝트 공용)

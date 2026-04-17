@@ -335,30 +335,39 @@ export INFISICAL_CLIENT_SECRET="<client-secret>"
 
 `apps/front/`이 최종적으로 프로젝트에 포함되는 경우에만 질문한다. back만 있는 프로젝트에서는 건너뛴다.
 
+프론트엔드는 **4가지** 선택지가 있다. React SPA와 Next.js SSR은 같은 `deploy-frontend-pm2.yml` 워크플로우를 쓰지만 **서버 재시작 방식이 다르므로** 구분해서 묻는다.
+
 ```yaml
 question: |
   Frontend 배포 방식을 선택해주세요.
 
-  - Vercel   : SaaS, 가장 간편. Vercel 계정/프로젝트 필요
-  - PM2      : 레거시 Jenkins 방식. 빌드 → tar.gz → SCP → Shell (PM2/Nginx)
-  - Docker   : Docker 이미지 빌드 → SCP → docker compose up
+  - Vercel       : SaaS, 가장 간편. Vercel 계정/프로젝트 필요
+  - SSR (PM2)    : Next.js 등 SSR 앱. 빌드 → tar.gz → SCP → PM2 재시작
+  - SPA (Static) : React SPA (CRA/Vite) 등 정적 파일. tar.gz → SCP → current/ 교체
+                   Nginx가 current/ 를 자동 서빙 (재시작 불필요)
+  - Docker       : Docker 이미지 빌드 → SCP → docker compose up
 header: "Frontend 배포 방식"
 options:
   - label: "Vercel (Recommended)"
     description: "Vercel CLI로 배포. 가장 간편하고 CDN/Edge 자동 적용. deploy-frontend-vercel.yml 활성화"
-  - label: "PM2 (레거시 Jenkins 방식)"
-    description: "빌드 → tar.gz 압축 → 인스턴스 서버 SCP → Shell 실행. deploy-frontend-pm2.yml 활성화"
+  - label: "SSR - PM2 (Next.js 등)"
+    description: "Next.js SSR 앱용. deploy-frontend-pm2.yml 활성화 + FRONT_APP_TYPE=pm2"
+  - label: "SPA - Static (React 등)"
+    description: "React SPA 등 정적 파일. deploy-frontend-pm2.yml 활성화 + FRONT_APP_TYPE=static (PM2 단계 건너뜀)"
   - label: "Docker"
     description: "Docker 이미지 빌드 → 인스턴스 서버 전송 → docker compose 재시작. deploy-frontend-docker.yml 활성화"
 ```
 
-선택 결과에 따라 **해당 워크플로우 파일의 `on: push` 블록만 활성화**하고 나머지는 `workflow_dispatch`만 남긴다. 구체적인 전환 절차는 `references/deploy-methods.md` 참조.
+선택 결과에 따라 **해당 워크플로우 파일의 `on: push` 블록만 활성화**하고, Infisical에 `FRONT_APP_TYPE`을 등록한다.
 
-| 선택 | 활성화 파일 | 비활성 파일 |
-|------|------------|------------|
-| Vercel | `deploy-frontend-vercel.yml` | pm2, docker (dispatch만) |
-| PM2 | `deploy-frontend-pm2.yml` | vercel, docker (dispatch만) |
-| Docker | `deploy-frontend-docker.yml` | vercel, pm2 (dispatch만) |
+| 선택 | 활성화 파일 | FRONT_APP_TYPE (Infisical) |
+|------|------------|----------------------------|
+| Vercel | `deploy-frontend-vercel.yml` | — (사용 안 함) |
+| SSR (PM2) | `deploy-frontend-pm2.yml` | `pm2` |
+| SPA (Static) | `deploy-frontend-pm2.yml` | `static` |
+| Docker | `deploy-frontend-docker.yml` | — (사용 안 함) |
+
+**왜 SPA에서 Nginx 설정을 여기서 묻지 않는가:** Nginx root 경로 설정은 **서버 프로비저닝 시 1회만** 진행하면 되는 작업이다. 한 번 `{BASE_PATH}/current/` 또는 그 하위 빌드 디렉토리를 가리키도록 설정해두면, 이후 배포는 `current/`만 교체하면 자동 반영된다. 배포 파이프라인이 매번 Nginx를 건드릴 이유가 없다. 상세는 `references/deploy-methods.md`의 "React SPA 프로젝트 세팅 체크리스트" 참조.
 
 ### 4-7. Backend 배포 방식 선택
 
@@ -525,9 +534,14 @@ B방식의 `init-project.sh`는 **단순**하다. `--mode`, `--front-org`, `--ba
      - /backend/                   런타임 .env
      - /backend/github-actions/    BACK_SERVER_HOST, BACK_SERVER_USER,
                                    BACK_DEPLOY_DIR, BACK_APP_NAME,
-                                   BACK_TAR_FILE, BACK_SSH_PRIVATE_KEY
+                                   BACK_TAR_FILE, BACK_SSH_PRIVATE_KEY,
+                                   BACK_APP_TYPE (선택, 기본 pm2)
      - /frontend/                  NEXT_PUBLIC_*
-     - /frontend/github-actions/   VERCEL_ORG_ID, VERCEL_PROJECT_ID
+     - /frontend/github-actions/   (Vercel 배포 시)   VERCEL_ORG_ID, VERCEL_PROJECT_ID
+                                   (PM2/Static 배포 시) FRONT_SERVER_HOST, FRONT_SERVER_USER,
+                                                      FRONT_DEPLOY_DIR, FRONT_APP_NAME,
+                                                      FRONT_TAR_FILE, FRONT_SSH_PRIVATE_KEY,
+                                                      FRONT_APP_TYPE (pm2 | static)
      - (Shared) /slack/            slack_bot_token, slack_channel
      - (Shared) /vercel/           VERCEL_TOKEN
 

@@ -12,6 +12,8 @@ B방식(모노레포 직접 배포)에서 Front/Back 각각의 배포 방식을 
 .github/workflows/
 ├── deploy-frontend-vercel.yml   ← Vercel CLI (Front 기본 활성)
 ├── deploy-frontend-pm2.yml      ← tar.gz + SCP + Shell (Front, workflow_dispatch만)
+│                                   ※ 실제로 Next.js SSR 과 React SPA 둘 다 처리 가능
+│                                     FRONT_APP_TYPE 시크릿으로 분기
 ├── deploy-frontend-docker.yml   ← Docker (Front, workflow_dispatch만)
 ├── deploy-backend-pm2.yml       ← tar.gz + SCP + Shell + PM2 (Back 기본 활성)
 └── deploy-backend-docker.yml    ← Docker (Back, workflow_dispatch만)
@@ -26,10 +28,31 @@ Front와 Back 각각에 대해 **배포 방식이 하나만 `on: push` 활성화
 | 앱 | 파일 | 트리거 | 상태 |
 |---|------|--------|------|
 | Front | `deploy-frontend-vercel.yml` | `push` + `dispatch` | ✅ 기본 활성 |
-| Front | `deploy-frontend-pm2.yml` | `dispatch` only | ⏸ 대기 |
+| Front | `deploy-frontend-pm2.yml` | `dispatch` only | ⏸ 대기 (Next SSR / React SPA 둘 다 지원) |
 | Front | `deploy-frontend-docker.yml` | `dispatch` only | ⏸ 대기 |
 | Back | `deploy-backend-pm2.yml` | `push` + `dispatch` | ✅ 기본 활성 |
 | Back | `deploy-backend-docker.yml` | `dispatch` only | ⏸ 대기 |
+
+## APP_TYPE (pm2 vs static)
+
+`deploy-{front,back}-pm2.yml` 워크플로우는 서버 쉘 스크립트(`~/server-deploy.sh`)를 호출할 때 **APP_TYPE 인자**를 전달한다. 이 값은 Infisical의 `FRONT_APP_TYPE` / `BACK_APP_TYPE` 시크릿에서 조회하며, 미지정 시 `pm2`가 기본값이다.
+
+| APP_TYPE | 대상 | 동작 |
+|----------|------|------|
+| `pm2` (기본) | Next.js SSR, Express, 기타 Node.js 런타임 | tar 해제 + `current/` 교체 + **PM2 재시작** |
+| `static` | React SPA (CRA/Vite), 기타 정적 파일 | tar 해제 + `current/` 교체 + **PM2 단계 건너뜀** |
+
+**static 모드에서 Nginx는 왜 신경 쓰지 않는가:** Nginx 설정(`root`, `try_files`, 심볼릭 링크 등)은 **서버 프로비저닝 시점에 1회만** 진행하면 된다. 한 번 `{BASE_PATH}/current/`를 서빙하도록 설정해두면, 그 이후 배포는 `current/` 디렉토리 내용만 교체하면 변경이 자동 반영된다 — 재시작이나 reload 불필요. 배포 파이프라인에서 Nginx를 건드릴 이유가 없다.
+
+**왜 Infisical 시크릿으로 받는가:** 앱이 Next SSR이냐 React SPA냐는 **프로젝트 단위 속성**이지 배포마다 바뀌는 값이 아니다. 한 번 등록해두면 이후 수정 불필요. 워크플로우 파일은 모든 프로젝트가 공유하므로 프로젝트별 값은 Infisical이 담당.
+
+### React SPA 프로젝트 세팅 체크리스트
+
+1. Infisical `/frontend/github-actions/` 경로에 `FRONT_APP_TYPE=static` 등록
+2. 서버에 Nginx 설치 및 설정 (최초 1회):
+   - `root {BASE_PATH}/current/{build 또는 dist};` 로 가리키게 설정
+   - `try_files $uri /index.html;` 로 SPA 라우팅 대응
+3. 이후 push 마다 `server-deploy.sh`가 `current/` 교체만 하고 PM2는 건너뜀
 
 ---
 

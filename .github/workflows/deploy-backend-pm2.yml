@@ -104,6 +104,8 @@ jobs:
           APP_NAME=$(get_secret BACK_APP_NAME)
           TAR_FILE=$(get_secret BACK_TAR_FILE)
           SSH_KEY=$(get_secret BACK_SSH_PRIVATE_KEY)
+          # BACK_APP_TYPE 은 선택 (미지정 시 pm2). 백엔드는 기본 PM2
+          APP_TYPE=$(get_secret BACK_APP_TYPE 2>/dev/null || echo "pm2")
 
           echo "::add-mask::$SSH_KEY"
 
@@ -114,6 +116,7 @@ jobs:
             echo "BACK_DEPLOY_DIR=$DEPLOY_DIR"
             echo "BACK_APP_NAME=$APP_NAME"
             echo "BACK_TAR_FILE=$TAR_FILE"
+            echo "BACK_APP_TYPE=$APP_TYPE"
           } >> $GITHUB_ENV
 
           # SSH 키는 step output으로 전달 (appleboy/*-action의 key 파라미터에 직접 사용)
@@ -231,10 +234,10 @@ jobs:
           username: ${{ env.BACK_SERVER_USER }}
           key: ${{ steps.deploy-secrets.outputs.ssh_key }}
           command_timeout: 10m
-          envs: BACK_DEPLOY_DIR,BACK_TAR_FILE,BACK_APP_NAME
+          envs: BACK_DEPLOY_DIR,BACK_TAR_FILE,BACK_APP_NAME,BACK_APP_TYPE
           script: |
             ENV="${{ github.ref_name == 'main' && 'production' || 'development' }}"
-            sh ~/server-deploy.sh "${BACK_DEPLOY_DIR}" "${BACK_TAR_FILE}" "${BACK_APP_NAME}" "${ENV}"
+            sh ~/server-deploy.sh "${BACK_DEPLOY_DIR}" "${BACK_TAR_FILE}" "${BACK_APP_NAME}" "${ENV}" "${BACK_APP_TYPE}"
 
       - name: Update GitHub Deployment (success)
         if: success()

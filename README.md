@@ -215,11 +215,19 @@ Infisical Project: {project}
   │   │   ├── BACK_DEPLOY_DIR
   │   │   ├── BACK_APP_NAME
   │   │   ├── BACK_TAR_FILE
-  │   │   └── BACK_SSH_PRIVATE_KEY
+  │   │   ├── BACK_SSH_PRIVATE_KEY
+  │   │   └── BACK_APP_TYPE            ← 선택 (pm2|static, 기본: pm2)
   │   ├── /frontend/            NEXT_PUBLIC_*, ...
   │   └── /frontend/github-actions/
-  │       ├── VERCEL_ORG_ID
-  │       └── VERCEL_PROJECT_ID
+  │       ├── VERCEL_ORG_ID            ← Vercel 배포 시
+  │       ├── VERCEL_PROJECT_ID        ← Vercel 배포 시
+  │       ├── FRONT_SERVER_HOST        ← PM2/Static 배포 시
+  │       ├── FRONT_SERVER_USER        ← PM2/Static 배포 시
+  │       ├── FRONT_DEPLOY_DIR         ← PM2/Static 배포 시
+  │       ├── FRONT_APP_NAME           ← PM2/Static 배포 시
+  │       ├── FRONT_TAR_FILE           ← PM2/Static 배포 시
+  │       ├── FRONT_SSH_PRIVATE_KEY    ← PM2/Static 배포 시
+  │       └── FRONT_APP_TYPE           ← PM2/Static 배포 시 (pm2: Next SSR, static: React SPA)
   └── prod 환경 (동일 키, 운영 값)
 
 Shared-Secrets 프로젝트 (여러 프로젝트 공용)

@@ -253,6 +253,7 @@ echo "     - /backend/             런타임 .env 시크릿 (DATABASE_URL, JWT_S
 echo "     - /backend/github-actions/"
 echo "         BACK_SERVER_HOST / BACK_SERVER_USER / BACK_DEPLOY_DIR"
 echo "         BACK_APP_NAME / BACK_TAR_FILE / BACK_SSH_PRIVATE_KEY"
+echo "         BACK_APP_TYPE (선택: pm2|static, 기본 pm2)"
 echo "     - /frontend/            런타임 Vercel 시크릿 (NEXT_PUBLIC_* 등)"
 echo "     - /frontend/github-actions/"
 echo "         VERCEL_ORG_ID / VERCEL_PROJECT_ID"

@@ -141,7 +141,8 @@ dev-{project} apps/back/** 변경 push
        ├── Infisical 로그인 (Universal Auth)
        ├── 배포 변수 조회 ({project} /backend/github-actions)
        │   BACK_SERVER_HOST, BACK_SERVER_USER, BACK_DEPLOY_DIR,
-       │   BACK_APP_NAME, BACK_TAR_FILE, BACK_SSH_PRIVATE_KEY
+       │   BACK_APP_NAME, BACK_TAR_FILE, BACK_SSH_PRIVATE_KEY,
+       │   BACK_APP_TYPE (선택, 기본 pm2)
        ├── 런타임 .env 조회 ({project} /backend) → .env.${env} 생성
        ├── Slack 시크릿 조회 (Shared-Secrets /slack)
        ├── npm ci → prisma generate → build → prune
