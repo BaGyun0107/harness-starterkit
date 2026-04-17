@@ -128,16 +128,24 @@ export INFISICAL_CLIENT_SECRET="<client-secret>"
 ### 개발 시작
 
 ```bash
-# 로컬 개발 (Infisical 로그인 필요)
-infisical login --domain=https://env.co-di.com  # 최초 1회
+# 최초 개발: apps/{back,front}/.env.example 을 복사해서 .env.development 로 사용
+cp apps/back/.env.example  apps/back/.env.development
+cp apps/front/.env.example apps/front/.env.development
 
 cd apps/front && npm run dev    # http://localhost:3000
 cd apps/back && npm run dev     # http://localhost:8080
+
+# Infisical 준비되면 로그인 1회만 하면 자동 전환 (dev-runner.js 가 감지)
+# infisical login --domain=https://env.co-di.com
 
 # 코드 push → 자동 배포
 git push origin dev   # → development 환경 배포
 git push origin main  # → production 환경 배포
 ```
+
+> `npm run dev` 는 `scripts/dev-runner.js` 를 통해 실행된다. Infisical CLI 설치 + 로그인 +
+> `.infisical.json` 유효성을 모두 만족하면 `infisical run` 으로, 하나라도 부족하면 로컬
+> `.env` 로 자동 fallback 한다. `dev:no-infisical` 같은 별도 명령은 필요 없다.
 
 ## 레포 구조
 

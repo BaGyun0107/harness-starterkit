@@ -104,23 +104,21 @@ infisical login --domain=https://env.co-di.com
 cd apps/back
 npm install
 npm run dev          # http://localhost:8080
-                     # 내부적으로 infisical run --env=dev --path=/backend -- tsx watch ...
 
 # Frontend
 cd apps/front
 npm install
 npm run dev          # http://localhost:3000
-                     # 내부적으로 infisical run --env=dev --path=/frontend -- next dev
 ```
 
-### Infisical 없이 실행 (긴급 시)
+`npm run dev` 하나로 **Infisical 연결 상태에 따라 자동 분기**된다 (`scripts/dev-runner.js`):
 
-`.env.local` 파일을 수동으로 만들고:
+| 조건 | 동작 |
+|------|------|
+| Infisical CLI 설치 + 로그인 + 유효한 `.infisical.json` | `infisical run --path=/{app} -- <command>` 실행 (런타임 시크릿 주입) |
+| 하나라도 미충족 | `<command>` 를 그대로 실행 (`.env.development` / `.env.production` 사용) |
 
-```bash
-cd apps/back
-npm run dev:no-infisical
-```
+즉, **최초에는 `.env.development` 로 개발**하다가 배포 시점에 Infisical 로그인 + `.infisical.json` 을 붙이면 **같은 `npm run dev` 가 자동으로 Infisical 경로로 전환**된다. 별도 `dev:no-infisical` 스크립트는 더 이상 필요하지 않다.
 
 ## CI/CD Pipeline
 

@@ -562,10 +562,15 @@ B방식의 `init-project.sh`는 **단순**하다. `--mode`, `--front-org`, `--ba
   개발 시작
 ════════════════════════════════════════════════════════════
 
-  infisical login --domain=https://env.co-di.com   # 최초 1회
+  # 최초에는 .env 로 개발 가능 (cp .env.example .env.development)
   cd apps/front && npm run dev    # http://localhost:3000
   cd apps/back && npm run dev     # http://localhost:8080
+
+  # Infisical 사용 준비되면 1회만 로그인. 이후 같은 npm run dev 가 자동 전환
+  # infisical login --domain=https://env.co-di.com
 
   git push origin dev   # → development 환경
   git push origin main  # → production 환경
 ```
+
+**dev-runner 자동 분기:** `npm run dev` 는 `scripts/dev-runner.js` 를 거쳐 Infisical 연결 여부를 런타임에 감지한다. CLI 설치 + 로그인 + `.infisical.json` 유효성을 모두 만족하면 `infisical run` 으로, 하나라도 부족하면 로컬 `.env` 로 자동 fallback 한다. 사용자는 `dev:no-infisical` 같은 별도 명령을 외울 필요가 없다.

@@ -49,19 +49,23 @@ apps/front/ 에 Next.js 프로젝트를 초기화해야 한다.
 
 6. TanStack Query Provider를 app/layout.tsx에 설정한다.
 
-7. package.json scripts 설정:
-   - dev: "infisical run --env=dev --path=/frontend -- next dev"
-   - dev:no-infisical: "next dev"
+7. package.json scripts 설정 (dev-runner 기반 — 단일 dev 명령):
+   - dev: "node ../../scripts/dev-runner.js frontend next dev"
+       → Infisical 로그인 + .infisical.json 있으면 infisical run, 없으면 그대로 next dev
+       → Infisical 전환 전/후 모두 동일한 `npm run dev` 로 동작
    - build: "next build"
    - start: "next start"
+   - lint:  "eslint ."
+   - typecheck: "tsc --noEmit"
+   - check: "npm run typecheck && npm run lint"
 
 8. .env.example — 하네스 레포의 apps/front/.env.example 에 Next.js 용 미니멈
    템플릿이 이미 배치되어 있다. 스캐폴딩 시 이 파일이 존재하는지 확인만 하고,
    없으면 하네스 기본 템플릿을 복사한다. 프로젝트 고유 변수(예: 분석 키 등)가
    필요하면 파일 끝에 추가한다.
 
-완료 후 npm run dev:no-infisical 로 정상 기동되는지 확인한다.
-(Infisical 미연결 상태이므로 infisical run은 Step 5 이후 동작)
+완료 후 npm run dev 로 정상 기동되는지 확인한다.
+(Infisical 미연결 상태에서는 자동으로 로컬 .env 로 fallback 되어 동작)
 ```
 
 ---
@@ -133,9 +137,10 @@ apps/back/ 에 Express + Prisma 백엔드 프로젝트를 초기화해야 한다
    스캐폴딩 후 이 파일이 존재하는지 확인만 하고, 없으면 하네스 기본 템플릿을 복사한다.
    프로젝트 고유 변수(예: REDIS_URL, SMTP 설정 등)가 필요하면 파일 끝에 추가한다.
 
-10. package.json scripts 설정:
-    - dev: "infisical run --env=dev --path=/backend -- tsx watch src/server.ts"
-    - dev:no-infisical: "tsx watch src/server.ts"
+10. package.json scripts 설정 (dev-runner 기반 — 단일 dev 명령):
+    - dev: "node ../../scripts/dev-runner.js backend tsx watch src/server.ts"
+        → Infisical 로그인 + .infisical.json 있으면 infisical run, 없으면 그대로 tsx watch
+        → Infisical 전환 전/후 모두 동일한 `npm run dev` 로 동작
     - build: "tsc"
     - start: "node dist/server.js"
     - test: "vitest run"
@@ -153,5 +158,5 @@ apps/back/ 에 Express + Prisma 백엔드 프로젝트를 초기화해야 한다
 
 1. **"스킬 파일을 먼저 읽어라"는 1단계에 고정.** 이 순서를 바꾸면 서브에이전트가 관례를 모르는 상태에서 코드를 쓰기 시작해 일관성이 깨진다.
 2. **기술 스택 버전은 하드코딩하지 않는다.** `express@5` 같은 major 버전은 명시해도 괜찮지만 minor/patch는 명시하지 마라. `create-next-app@latest`를 쓰는 이유도 동일하다.
-3. **Infisical 스크립트를 먼저 정의한다.** `dev` 스크립트가 `infisical run`으로 래핑되는 것이 B방식 관례다. 로컬 fallback용 `dev:no-infisical`도 함께 제공한다.
+3. **`dev` 는 반드시 `scripts/dev-runner.js` 를 거친다.** dev-runner 가 Infisical 연결 상태를 런타임에 판단하여 자동 분기하므로, 사용자는 `npm run dev` 하나만 알면 된다. 별도 `dev:no-infisical` 스크립트는 추가하지 마라 — 중복 경로가 생기면 초기 세팅 단계에서 혼란을 준다.
 4. **Docker 파일은 미리 배치한다.** 현재 PM2 방식이지만 Dockerfile/docker-compose.yml을 미리 만들어두면 전환 시 즉시 활성화 가능하다. 빈 파일도 아니고 실제로 동작 가능한 상태여야 한다.
