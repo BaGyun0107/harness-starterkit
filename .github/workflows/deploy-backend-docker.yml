@@ -108,7 +108,10 @@ jobs:
           CF_CLIENT_ID=$(get_secret CF_ACCESS_CLIENT_ID)
           CF_CLIENT_SECRET=$(get_secret CF_ACCESS_CLIENT_SECRET)
 
-          echo "::add-mask::$SSH_KEY"
+          # multiline 값(SSH 키)은 줄 단위로 마스킹해야 로그 노출 방지됨
+          while IFS= read -r line; do
+            [ -n "$line" ] && echo "::add-mask::$line"
+          done <<< "$SSH_KEY"
           echo "::add-mask::$CF_CLIENT_ID"
           echo "::add-mask::$CF_CLIENT_SECRET"
 

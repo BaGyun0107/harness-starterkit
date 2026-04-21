@@ -109,7 +109,10 @@ jobs:
           # BACK_APP_TYPE 은 선택 (미지정 시 pm2). 백엔드는 기본 PM2
           APP_TYPE=$(get_secret BACK_APP_TYPE 2>/dev/null || echo "pm2")
 
-          echo "::add-mask::$SSH_KEY"
+          # multiline 값(SSH 키)은 줄 단위로 마스킹해야 로그 노출 방지됨
+          while IFS= read -r line; do
+            [ -n "$line" ] && echo "::add-mask::$line"
+          done <<< "$SSH_KEY"
           echo "::add-mask::$CF_CLIENT_ID"
           echo "::add-mask::$CF_CLIENT_SECRET"
 
