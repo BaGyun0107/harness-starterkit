@@ -534,16 +534,18 @@ B방식의 `init-project.sh`는 **단순**하다. `--mode`, `--front-org`, `--ba
      ⚡ 템플릿: apps/back/.env.example, apps/front/.env.example 에 최소 필요 변수가
         정의되어 있다. 이 파일을 열어 key 목록을 참고하면서 Infisical 에 등록한다.
      - /backend/                   런타임 .env (apps/back/.env.example 참고)
-     - /backend/github-actions/    BACK_SERVER_HOST, BACK_SERVER_USER,
+     - /backend/github-actions/    BACK_SSH_TUNNEL_HOST, BACK_SERVER_USER,
                                    BACK_DEPLOY_DIR, BACK_APP_NAME,
                                    BACK_TAR_FILE, BACK_SSH_PRIVATE_KEY,
-                                   BACK_APP_TYPE (선택, 기본 pm2)
+                                   BACK_APP_TYPE (선택, 기본 pm2),
+                                   CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET
      - /frontend/                  NEXT_PUBLIC_* (apps/front/.env.example 참고)
      - /frontend/github-actions/   (Vercel 배포 시)   VERCEL_ORG_ID, VERCEL_PROJECT_ID
-                                   (PM2/Static 배포 시) FRONT_SERVER_HOST, FRONT_SERVER_USER,
+                                   (PM2/Static 배포 시) FRONT_SSH_TUNNEL_HOST, FRONT_SERVER_USER,
                                                       FRONT_DEPLOY_DIR, FRONT_APP_NAME,
                                                       FRONT_TAR_FILE, FRONT_SSH_PRIVATE_KEY,
-                                                      FRONT_APP_TYPE (pm2 | static)
+                                                      FRONT_APP_TYPE (pm2 | static),
+                                                      CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET
      - (Shared) /slack/            slack_bot_token, slack_channel
      - (Shared) /vercel/           VERCEL_TOKEN
 
@@ -551,7 +553,11 @@ B방식의 `init-project.sh`는 **단순**하다. `--mode`, `--front-org`, `--ba
 
   4. 배포 서버 사전 준비
      - Node.js, PM2 설치 (PM2 방식)
-     - SSH authorized_keys 에 공개키 등록
+     - SSH authorized_keys 에 공개키 등록 (CONTRIBUTING.md "배포용 SSH 키 생성" 참조)
+     - Cloudflare Tunnel 설정 (docs/cloudflare-tunnel-ssh-guide.md 참조)
+         · 서버에 cloudflared 설치 + 서비스 등록
+         · Cloudflare Zero Trust에서 터널/Application/Service Token/정책/WAF 예외 설정
+         · 서버 방화벽에서 22포트 인바운드 차단 (터널이 localhost:22로 연결)
      - scripts/server-deploy.sh 를 ~/server-deploy.sh 로 배치 (최초 1회, 모든 프로젝트 공유)
          scp scripts/server-deploy.sh rocky@<server>:~/server-deploy.sh
          ssh rocky@<server> "chmod +x ~/server-deploy.sh"

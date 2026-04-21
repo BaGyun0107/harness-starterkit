@@ -186,17 +186,19 @@ PM2 파일의 `push:` 주석 처리 + Docker 파일의 `push:` 주석 해제 (�
 ### PM2/Docker 배포 시 필요 (Front)
 
 ```
-(프로젝트)    /frontend/github-actions/  FRONT_SERVER_HOST, FRONT_SERVER_USER,
+(프로젝트)    /frontend/github-actions/  FRONT_SSH_TUNNEL_HOST, FRONT_SERVER_USER,
                                          FRONT_DEPLOY_DIR, FRONT_APP_NAME (PM2만),
-                                         FRONT_TAR_FILE (PM2만), FRONT_SSH_PRIVATE_KEY
+                                         FRONT_TAR_FILE (PM2만), FRONT_SSH_PRIVATE_KEY,
+                                         CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET
 ```
 
 ### PM2/Docker 배포 시 필요 (Back)
 
 ```
-(프로젝트)    /backend/github-actions/   BACK_SERVER_HOST, BACK_SERVER_USER,
+(프로젝트)    /backend/github-actions/   BACK_SSH_TUNNEL_HOST, BACK_SERVER_USER,
                                          BACK_DEPLOY_DIR, BACK_APP_NAME (PM2만),
-                                         BACK_TAR_FILE (PM2만), BACK_SSH_PRIVATE_KEY
+                                         BACK_TAR_FILE (PM2만), BACK_SSH_PRIVATE_KEY,
+                                         CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET
 ```
 
 ---
