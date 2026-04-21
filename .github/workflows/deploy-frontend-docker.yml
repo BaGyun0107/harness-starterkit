@@ -99,17 +99,23 @@ jobs:
               --domain=${{ env.INFISICAL_API_URL }}
           }
 
-          SERVER_HOST=$(get_secret FRONT_SERVER_HOST)
           SERVER_USER=$(get_secret FRONT_SERVER_USER)
           DEPLOY_DIR=$(get_secret FRONT_DEPLOY_DIR)
           SSH_KEY=$(get_secret FRONT_SSH_PRIVATE_KEY)
+          SSH_TUNNEL_HOST=$(get_secret FRONT_SSH_TUNNEL_HOST)
+          CF_CLIENT_ID=$(get_secret CF_ACCESS_CLIENT_ID)
+          CF_CLIENT_SECRET=$(get_secret CF_ACCESS_CLIENT_SECRET)
 
           echo "::add-mask::$SSH_KEY"
+          echo "::add-mask::$CF_CLIENT_ID"
+          echo "::add-mask::$CF_CLIENT_SECRET"
 
           {
-            echo "FRONT_SERVER_HOST=$SERVER_HOST"
             echo "FRONT_SERVER_USER=$SERVER_USER"
             echo "FRONT_DEPLOY_DIR=$DEPLOY_DIR"
+            echo "FRONT_SSH_TUNNEL_HOST=$SSH_TUNNEL_HOST"
+            echo "CF_ACCESS_CLIENT_ID=$CF_CLIENT_ID"
+            echo "CF_ACCESS_CLIENT_SECRET=$CF_CLIENT_SECRET"
           } >> $GITHUB_ENV
 
           {
@@ -193,56 +199,65 @@ jobs:
           environment: ${{ steps.env.outputs.infisical_env }}
           description: Frontend ${{ steps.env.outputs.infisical_env }} deploy (docker)
 
+      # Cloudflare Tunnel 경유 SSH — 22포트 전역 개방 불필요
+      # 가이드: docs/cloudflare-tunnel-ssh-guide.md
+      - name: Install cloudflared
+        run: |
+          curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
+          chmod +x /usr/local/bin/cloudflared
+
+      - name: Setup SSH via Cloudflare Tunnel
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ steps.deploy-secrets.outputs.ssh_key }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          {
+            echo "Host deploy-server"
+            echo "  HostName ${FRONT_SSH_TUNNEL_HOST}"
+            echo "  User ${FRONT_SERVER_USER}"
+            echo "  IdentityFile ~/.ssh/deploy_key"
+            echo "  StrictHostKeyChecking no"
+            echo "  UserKnownHostsFile /dev/null"
+            echo "  ProxyCommand cloudflared access ssh --hostname %h --id ${CF_ACCESS_CLIENT_ID} --secret ${CF_ACCESS_CLIENT_SECRET}"
+          } > ~/.ssh/config
+
       - name: Deploy image & compose file to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ env.FRONT_SERVER_HOST }}
-          username: ${{ env.FRONT_SERVER_USER }}
-          key: ${{ steps.deploy-secrets.outputs.ssh_key }}
-          source: "apps/front/image.tar.gz,apps/front/docker-compose.yml,apps/front/${{ steps.env.outputs.env_file }}"
-          target: ${{ env.FRONT_DEPLOY_DIR }}
-          strip_components: 2
-          timeout: 300s
+        run: |
+          scp -F ~/.ssh/config \
+            apps/front/image.tar.gz \
+            apps/front/docker-compose.yml \
+            apps/front/${{ steps.env.outputs.env_file }} \
+            deploy-server:${{ env.FRONT_DEPLOY_DIR }}/
 
       - name: Load image & restart container
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ env.FRONT_SERVER_HOST }}
-          username: ${{ env.FRONT_SERVER_USER }}
-          key: ${{ steps.deploy-secrets.outputs.ssh_key }}
-          command_timeout: 10m
-          envs: FRONT_DEPLOY_DIR
-          script: |
-            cd "${FRONT_DEPLOY_DIR}"
-            REPO_NAME="${{ github.event.repository.name }}-front"
-
-            docker tag "${REPO_NAME}:latest" "${REPO_NAME}:rollback" 2>/dev/null || true
+        run: |
+          REPO_NAME="${{ github.event.repository.name }}-front"
+          ssh -F ~/.ssh/config deploy-server "
+            cd ${FRONT_DEPLOY_DIR}
+            docker tag ${REPO_NAME}:latest ${REPO_NAME}:rollback 2>/dev/null || true
             docker load -i image.tar.gz
-            REPO_NAME="${REPO_NAME}" docker compose up -d --force-recreate
+            REPO_NAME=${REPO_NAME} docker compose up -d --force-recreate
             rm -f image.tar.gz
-            echo "Frontend deployed: ${{ github.sha }}"
+            echo 'Frontend deployed: ${{ github.sha }}'
+          "
 
       - name: Health check
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ env.FRONT_SERVER_HOST }}
-          username: ${{ env.FRONT_SERVER_USER }}
-          key: ${{ steps.deploy-secrets.outputs.ssh_key }}
-          command_timeout: 5m
-          script: |
+        run: |
+          ssh -F ~/.ssh/config deploy-server "
             sleep 5
-            PORT="${FRONT_HEALTH_PORT:-3000}"
+            PORT=\${FRONT_HEALTH_PORT:-3000}
             for i in 1 2 3 4 5 6 7 8 9 10; do
-              if curl -sf "http://localhost:${PORT}" > /dev/null 2>&1; then
-                echo "Health check passed (port: ${PORT}, attempt: ${i})"
+              if curl -sf http://localhost:\${PORT} > /dev/null 2>&1; then
+                echo \"Health check passed (port: \${PORT}, attempt: \${i})\"
                 exit 0
               fi
-              echo "Waiting for server... (${i}/10)"
+              echo \"Waiting for server... (\${i}/10)\"
               sleep 5
             done
-            echo "Health check failed (port: ${PORT})"
-            echo "수동 롤백: docker tag <repo>-front:rollback <repo>-front:latest && docker compose up -d --force-recreate"
+            echo \"Health check failed (port: \${PORT})\"
+            echo \"수동 롤백: docker tag <repo>-front:rollback <repo>-front:latest && docker compose up -d --force-recreate\"
             exit 1
+          "
 
       - name: Update GitHub Deployment (success)
         if: success()

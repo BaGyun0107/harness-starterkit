@@ -98,28 +98,32 @@ jobs:
               --domain=${{ env.INFISICAL_API_URL }}
           }
 
-          SERVER_HOST=$(get_secret BACK_SERVER_HOST)
           SERVER_USER=$(get_secret BACK_SERVER_USER)
           DEPLOY_DIR=$(get_secret BACK_DEPLOY_DIR)
           APP_NAME=$(get_secret BACK_APP_NAME)
           TAR_FILE=$(get_secret BACK_TAR_FILE)
           SSH_KEY=$(get_secret BACK_SSH_PRIVATE_KEY)
+          SSH_TUNNEL_HOST=$(get_secret BACK_SSH_TUNNEL_HOST)
+          CF_CLIENT_ID=$(get_secret CF_ACCESS_CLIENT_ID)
+          CF_CLIENT_SECRET=$(get_secret CF_ACCESS_CLIENT_SECRET)
           # BACK_APP_TYPE 은 선택 (미지정 시 pm2). 백엔드는 기본 PM2
           APP_TYPE=$(get_secret BACK_APP_TYPE 2>/dev/null || echo "pm2")
 
           echo "::add-mask::$SSH_KEY"
+          echo "::add-mask::$CF_CLIENT_ID"
+          echo "::add-mask::$CF_CLIENT_SECRET"
 
-          # 후속 step을 위해 env로 노출 (비민감값)
           {
-            echo "BACK_SERVER_HOST=$SERVER_HOST"
             echo "BACK_SERVER_USER=$SERVER_USER"
             echo "BACK_DEPLOY_DIR=$DEPLOY_DIR"
             echo "BACK_APP_NAME=$APP_NAME"
             echo "BACK_TAR_FILE=$TAR_FILE"
             echo "BACK_APP_TYPE=$APP_TYPE"
+            echo "BACK_SSH_TUNNEL_HOST=$SSH_TUNNEL_HOST"
+            echo "CF_ACCESS_CLIENT_ID=$CF_CLIENT_ID"
+            echo "CF_ACCESS_CLIENT_SECRET=$CF_CLIENT_SECRET"
           } >> $GITHUB_ENV
 
-          # SSH 키는 step output으로 전달 (appleboy/*-action의 key 파라미터에 직접 사용)
           {
             echo "ssh_key<<EOF_SSH_KEY"
             echo "$SSH_KEY"
@@ -213,31 +217,39 @@ jobs:
           environment: ${{ steps.env.outputs.infisical_env }}
           description: Backend ${{ steps.env.outputs.infisical_env }} deploy
 
+      # Cloudflare Tunnel 경유 SSH — 22포트 전역 개방 불필요
+      # 가이드: docs/cloudflare-tunnel-ssh-guide.md
+      - name: Install cloudflared
+        run: |
+          curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
+          chmod +x /usr/local/bin/cloudflared
+
+      - name: Setup SSH via Cloudflare Tunnel
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ steps.deploy-secrets.outputs.ssh_key }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          {
+            echo "Host deploy-server"
+            echo "  HostName ${BACK_SSH_TUNNEL_HOST}"
+            echo "  User ${BACK_SERVER_USER}"
+            echo "  IdentityFile ~/.ssh/deploy_key"
+            echo "  StrictHostKeyChecking no"
+            echo "  UserKnownHostsFile /dev/null"
+            echo "  ProxyCommand cloudflared access ssh --hostname %h --id ${CF_ACCESS_CLIENT_ID} --secret ${CF_ACCESS_CLIENT_SECRET}"
+          } > ~/.ssh/config
+
       - name: Deploy to server via SCP
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ env.BACK_SERVER_HOST }}
-          username: ${{ env.BACK_SERVER_USER }}
-          key: ${{ steps.deploy-secrets.outputs.ssh_key }}
-          source: apps/back/${{ env.BACK_TAR_FILE }}
-          target: ${{ env.BACK_DEPLOY_DIR }}
-          strip_components: 2
-          timeout: 300s
+        run: |
+          scp -F ~/.ssh/config apps/back/${{ env.BACK_TAR_FILE }} deploy-server:${{ env.BACK_DEPLOY_DIR }}/
 
       # 서버에는 범용 ~/server-deploy.sh 스크립트가 한 번만 배치되어 있어야 한다.
-      # (harness 의 scripts/server-deploy.sh 를 서버에 scp 한 뒤 실행 권한 부여)
       # 프로젝트/환경별 값은 인자로 전달 → 서버 스크립트 복사/수정 불필요
       - name: Run deploy script on server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ env.BACK_SERVER_HOST }}
-          username: ${{ env.BACK_SERVER_USER }}
-          key: ${{ steps.deploy-secrets.outputs.ssh_key }}
-          command_timeout: 10m
-          envs: BACK_DEPLOY_DIR,BACK_TAR_FILE,BACK_APP_NAME,BACK_APP_TYPE
-          script: |
-            ENV="${{ github.ref_name == 'main' && 'production' || 'development' }}"
-            sh ~/server-deploy.sh "${BACK_DEPLOY_DIR}" "${BACK_TAR_FILE}" "${BACK_APP_NAME}" "${ENV}" "${BACK_APP_TYPE}"
+        run: |
+          ENV="${{ github.ref_name == 'main' && 'production' || 'development' }}"
+          ssh -F ~/.ssh/config deploy-server \
+            "sh ~/server-deploy.sh '${BACK_DEPLOY_DIR}' '${BACK_TAR_FILE}' '${BACK_APP_NAME}' '${ENV}' '${BACK_APP_TYPE}'"
 
       - name: Update GitHub Deployment (success)
         if: success()

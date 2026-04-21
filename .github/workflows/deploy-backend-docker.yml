@@ -101,21 +101,25 @@ jobs:
               --domain=${{ env.INFISICAL_API_URL }}
           }
 
-          SERVER_HOST=$(get_secret BACK_SERVER_HOST)
           SERVER_USER=$(get_secret BACK_SERVER_USER)
           DEPLOY_DIR=$(get_secret BACK_DEPLOY_DIR)
           SSH_KEY=$(get_secret BACK_SSH_PRIVATE_KEY)
+          SSH_TUNNEL_HOST=$(get_secret BACK_SSH_TUNNEL_HOST)
+          CF_CLIENT_ID=$(get_secret CF_ACCESS_CLIENT_ID)
+          CF_CLIENT_SECRET=$(get_secret CF_ACCESS_CLIENT_SECRET)
 
           echo "::add-mask::$SSH_KEY"
+          echo "::add-mask::$CF_CLIENT_ID"
+          echo "::add-mask::$CF_CLIENT_SECRET"
 
-          # 후속 step을 위해 env로 노출 (비민감값)
           {
-            echo "BACK_SERVER_HOST=$SERVER_HOST"
             echo "BACK_SERVER_USER=$SERVER_USER"
             echo "BACK_DEPLOY_DIR=$DEPLOY_DIR"
+            echo "BACK_SSH_TUNNEL_HOST=$SSH_TUNNEL_HOST"
+            echo "CF_ACCESS_CLIENT_ID=$CF_CLIENT_ID"
+            echo "CF_ACCESS_CLIENT_SECRET=$CF_CLIENT_SECRET"
           } >> $GITHUB_ENV
 
-          # SSH 키는 step output으로 전달 (appleboy/*-action의 key 파라미터에 직접 사용)
           {
             echo "ssh_key<<EOF_SSH_KEY"
             echo "$SSH_KEY"
@@ -198,68 +202,65 @@ jobs:
           environment: ${{ steps.env.outputs.infisical_env }}
           description: Backend ${{ steps.env.outputs.infisical_env }} deploy (docker)
 
+      # Cloudflare Tunnel 경유 SSH — 22포트 전역 개방 불필요
+      # 가이드: docs/cloudflare-tunnel-ssh-guide.md
+      - name: Install cloudflared
+        run: |
+          curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
+          chmod +x /usr/local/bin/cloudflared
+
+      - name: Setup SSH via Cloudflare Tunnel
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ steps.deploy-secrets.outputs.ssh_key }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          {
+            echo "Host deploy-server"
+            echo "  HostName ${BACK_SSH_TUNNEL_HOST}"
+            echo "  User ${BACK_SERVER_USER}"
+            echo "  IdentityFile ~/.ssh/deploy_key"
+            echo "  StrictHostKeyChecking no"
+            echo "  UserKnownHostsFile /dev/null"
+            echo "  ProxyCommand cloudflared access ssh --hostname %h --id ${CF_ACCESS_CLIENT_ID} --secret ${CF_ACCESS_CLIENT_SECRET}"
+          } > ~/.ssh/config
+
       - name: Deploy image & compose file to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ env.BACK_SERVER_HOST }}
-          username: ${{ env.BACK_SERVER_USER }}
-          key: ${{ steps.deploy-secrets.outputs.ssh_key }}
-          source: "apps/back/image.tar.gz,apps/back/docker-compose.yml,apps/back/${{ steps.env.outputs.env_file }}"
-          target: ${{ env.BACK_DEPLOY_DIR }}
-          strip_components: 2
-          timeout: 300s
+        run: |
+          scp -F ~/.ssh/config \
+            apps/back/image.tar.gz \
+            apps/back/docker-compose.yml \
+            apps/back/${{ steps.env.outputs.env_file }} \
+            deploy-server:${{ env.BACK_DEPLOY_DIR }}/
 
       - name: Load image & restart container
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ env.BACK_SERVER_HOST }}
-          username: ${{ env.BACK_SERVER_USER }}
-          key: ${{ steps.deploy-secrets.outputs.ssh_key }}
-          command_timeout: 10m
-          envs: BACK_DEPLOY_DIR
-          script: |
-            cd "${BACK_DEPLOY_DIR}"
-            REPO_NAME="${{ github.event.repository.name }}"
-
-            # 이전 이미지 백업 (롤백용)
-            docker tag "${REPO_NAME}:latest" "${REPO_NAME}:rollback" 2>/dev/null || true
-
-            # 새 이미지 로드
+        run: |
+          REPO_NAME="${{ github.event.repository.name }}"
+          ssh -F ~/.ssh/config deploy-server "
+            cd ${BACK_DEPLOY_DIR}
+            docker tag ${REPO_NAME}:latest ${REPO_NAME}:rollback 2>/dev/null || true
             docker load -i image.tar.gz
-
-            # 컨테이너 재시작 (docker-compose.yml 필수)
-            REPO_NAME="${REPO_NAME}" docker compose up -d --force-recreate
-
-            # 이미지 tar 정리
+            REPO_NAME=${REPO_NAME} docker compose up -d --force-recreate
             rm -f image.tar.gz
-            echo "Backend deployed: ${{ github.sha }}"
+            echo 'Backend deployed: ${{ github.sha }}'
+          "
 
       - name: Health check
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ env.BACK_SERVER_HOST }}
-          username: ${{ env.BACK_SERVER_USER }}
-          key: ${{ steps.deploy-secrets.outputs.ssh_key }}
-          command_timeout: 5m
-          script: |
-            # 컨테이너 기동 대기
+        run: |
+          ssh -F ~/.ssh/config deploy-server "
             sleep 5
-
-            # 기본 포트 8080, BACK_HEALTH_PORT가 있으면 우선
-            PORT="${BACK_HEALTH_PORT:-8080}"
-
+            PORT=\${BACK_HEALTH_PORT:-8080}
             for i in 1 2 3 4 5 6 7 8 9 10; do
-              if curl -sf "http://localhost:${PORT}/health" > /dev/null 2>&1; then
-                echo "Health check passed (port: ${PORT}, attempt: ${i})"
+              if curl -sf http://localhost:\${PORT}/health > /dev/null 2>&1; then
+                echo \"Health check passed (port: \${PORT}, attempt: \${i})\"
                 exit 0
               fi
-              echo "Waiting for server... (${i}/10)"
+              echo \"Waiting for server... (\${i}/10)\"
               sleep 5
             done
-
-            echo "Health check failed (port: ${PORT})"
-            echo "수동 롤백: docker tag <repo>:rollback <repo>:latest && docker compose up -d --force-recreate"
+            echo \"Health check failed (port: \${PORT})\"
+            echo \"수동 롤백: docker tag <repo>:rollback <repo>:latest && docker compose up -d --force-recreate\"
             exit 1
+          "
 
       - name: Update GitHub Deployment (success)
         if: success()
