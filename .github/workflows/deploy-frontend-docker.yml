@@ -37,8 +37,9 @@ concurrency:
 
 env:
   INFISICAL_API_URL: https://env.co-di.com
-  INFISICAL_PROJECT_ID: 8c2a354e-1dea-4a0c-bb74-5d249e3580b9
+  INFISICAL_PROJECT_ID: _PROJECT_ID_
   SHARED_PROJECT_ID: 7b0a2f95-2d6b-4510-a6b7-029b2f8dfe10
+  CF_SHARED_PATH: _CF_SHARED_PATH_
   NODE_VERSION: '24'
 
 jobs:
@@ -103,22 +104,16 @@ jobs:
           DEPLOY_DIR=$(get_secret FRONT_DEPLOY_DIR)
           SSH_KEY=$(get_secret FRONT_SSH_PRIVATE_KEY)
           SSH_TUNNEL_HOST=$(get_secret FRONT_SSH_TUNNEL_HOST)
-          CF_CLIENT_ID=$(get_secret CF_ACCESS_CLIENT_ID)
-          CF_CLIENT_SECRET=$(get_secret CF_ACCESS_CLIENT_SECRET)
 
           # multiline 값(SSH 키)은 줄 단위로 마스킹해야 로그 노출 방지됨
           while IFS= read -r line; do
             [ -n "$line" ] && echo "::add-mask::$line"
           done <<< "$SSH_KEY"
-          echo "::add-mask::$CF_CLIENT_ID"
-          echo "::add-mask::$CF_CLIENT_SECRET"
 
           {
             echo "FRONT_SERVER_USER=$SERVER_USER"
             echo "FRONT_DEPLOY_DIR=$DEPLOY_DIR"
             echo "FRONT_SSH_TUNNEL_HOST=$SSH_TUNNEL_HOST"
-            echo "CF_ACCESS_CLIENT_ID=$CF_CLIENT_ID"
-            echo "CF_ACCESS_CLIENT_SECRET=$CF_CLIENT_SECRET"
           } >> $GITHUB_ENV
 
           {
@@ -126,6 +121,27 @@ jobs:
             echo "$SSH_KEY"
             echo "EOF_SSH_KEY"
           } >> $GITHUB_OUTPUT
+
+      - name: Fetch Cloudflare secrets (Shared-Secrets)
+        env:
+          INFISICAL_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          get_cf_secret() {
+            infisical secrets get "$1" \
+              --projectId=${{ env.SHARED_PROJECT_ID }} \
+              --env=${{ steps.env.outputs.infisical_env }} \
+              --path=${{ env.CF_SHARED_PATH }} \
+              --plain \
+              --domain=${{ env.INFISICAL_API_URL }}
+          }
+          CF_CLIENT_ID=$(get_cf_secret CF_ACCESS_CLIENT_ID)
+          CF_CLIENT_SECRET=$(get_cf_secret CF_ACCESS_CLIENT_SECRET)
+          echo "::add-mask::$CF_CLIENT_ID"
+          echo "::add-mask::$CF_CLIENT_SECRET"
+          {
+            echo "CF_ACCESS_CLIENT_ID=$CF_CLIENT_ID"
+            echo "CF_ACCESS_CLIENT_SECRET=$CF_CLIENT_SECRET"
+          } >> $GITHUB_ENV
 
       - name: Fetch Slack secrets (Shared-Secrets)
         id: slack

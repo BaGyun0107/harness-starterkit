@@ -33,8 +33,9 @@ concurrency:
 
 env:
   INFISICAL_API_URL: https://env.co-di.com
-  INFISICAL_PROJECT_ID: 8c2a354e-1dea-4a0c-bb74-5d249e3580b9
+  INFISICAL_PROJECT_ID: _PROJECT_ID_
   SHARED_PROJECT_ID: 7b0a2f95-2d6b-4510-a6b7-029b2f8dfe10
+  CF_SHARED_PATH: _CF_SHARED_PATH_
   NODE_VERSION: '24'
 
 jobs:
@@ -104,8 +105,6 @@ jobs:
           TAR_FILE=$(get_secret BACK_TAR_FILE)
           SSH_KEY=$(get_secret BACK_SSH_PRIVATE_KEY)
           SSH_TUNNEL_HOST=$(get_secret BACK_SSH_TUNNEL_HOST)
-          CF_CLIENT_ID=$(get_secret CF_ACCESS_CLIENT_ID)
-          CF_CLIENT_SECRET=$(get_secret CF_ACCESS_CLIENT_SECRET)
           # BACK_APP_TYPE 은 선택 (미지정 시 pm2). 백엔드는 기본 PM2
           APP_TYPE=$(get_secret BACK_APP_TYPE 2>/dev/null || echo "pm2")
 
@@ -113,8 +112,6 @@ jobs:
           while IFS= read -r line; do
             [ -n "$line" ] && echo "::add-mask::$line"
           done <<< "$SSH_KEY"
-          echo "::add-mask::$CF_CLIENT_ID"
-          echo "::add-mask::$CF_CLIENT_SECRET"
 
           {
             echo "BACK_SERVER_USER=$SERVER_USER"
@@ -123,8 +120,6 @@ jobs:
             echo "BACK_TAR_FILE=$TAR_FILE"
             echo "BACK_APP_TYPE=$APP_TYPE"
             echo "BACK_SSH_TUNNEL_HOST=$SSH_TUNNEL_HOST"
-            echo "CF_ACCESS_CLIENT_ID=$CF_CLIENT_ID"
-            echo "CF_ACCESS_CLIENT_SECRET=$CF_CLIENT_SECRET"
           } >> $GITHUB_ENV
 
           {
@@ -132,6 +127,27 @@ jobs:
             echo "$SSH_KEY"
             echo "EOF_SSH_KEY"
           } >> $GITHUB_OUTPUT
+
+      - name: Fetch Cloudflare secrets (Shared-Secrets)
+        env:
+          INFISICAL_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          get_cf_secret() {
+            infisical secrets get "$1" \
+              --projectId=${{ env.SHARED_PROJECT_ID }} \
+              --env=${{ steps.env.outputs.infisical_env }} \
+              --path=${{ env.CF_SHARED_PATH }} \
+              --plain \
+              --domain=${{ env.INFISICAL_API_URL }}
+          }
+          CF_CLIENT_ID=$(get_cf_secret CF_ACCESS_CLIENT_ID)
+          CF_CLIENT_SECRET=$(get_cf_secret CF_ACCESS_CLIENT_SECRET)
+          echo "::add-mask::$CF_CLIENT_ID"
+          echo "::add-mask::$CF_CLIENT_SECRET"
+          {
+            echo "CF_ACCESS_CLIENT_ID=$CF_CLIENT_ID"
+            echo "CF_ACCESS_CLIENT_SECRET=$CF_CLIENT_SECRET"
+          } >> $GITHUB_ENV
 
       - name: Fetch Slack secrets (Shared-Secrets)
         id: slack
@@ -220,7 +236,6 @@ jobs:
           environment: ${{ steps.env.outputs.infisical_env }}
           description: Backend ${{ steps.env.outputs.infisical_env }} deploy
 
-      # Cloudflare Tunnel 경유 SSH — 22포트 전역 개방 불필요
       # 가이드: docs/cloudflare-tunnel-ssh-guide.md
       - name: Install cloudflared
         run: |

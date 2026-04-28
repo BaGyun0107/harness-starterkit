@@ -13,12 +13,11 @@
 name: Deploy Frontend (PM2)
 
 on:
-  # ─── PM2 전환 시 아래 블록 주석 해제 ───
-  # push:
-  #   branches: [main, dev]
-  #   paths:
-  #     - 'apps/front/**'
-  #     - '.github/workflows/deploy-frontend-pm2.yml'
+  push:
+    branches: [main, dev]
+    paths:
+      - 'apps/front/**'
+      - '.github/workflows/deploy-frontend-pm2.yml'
   workflow_dispatch:
     inputs:
       environment:
@@ -37,8 +36,9 @@ concurrency:
 
 env:
   INFISICAL_API_URL: https://env.co-di.com
-  INFISICAL_PROJECT_ID: 8c2a354e-1dea-4a0c-bb74-5d249e3580b9
+  INFISICAL_PROJECT_ID: _PROJECT_ID_
   SHARED_PROJECT_ID: 7b0a2f95-2d6b-4510-a6b7-029b2f8dfe10
+  CF_SHARED_PATH: _CF_SHARED_PATH_
   NODE_VERSION: '24'
 
 jobs:
@@ -107,8 +107,6 @@ jobs:
           TAR_FILE=$(get_secret FRONT_TAR_FILE)
           SSH_KEY=$(get_secret FRONT_SSH_PRIVATE_KEY)
           SSH_TUNNEL_HOST=$(get_secret FRONT_SSH_TUNNEL_HOST)
-          CF_CLIENT_ID=$(get_secret CF_ACCESS_CLIENT_ID)
-          CF_CLIENT_SECRET=$(get_secret CF_ACCESS_CLIENT_SECRET)
           # FRONT_APP_TYPE: pm2 (Next.js SSR 등) | static (React SPA 등)
           # 미지정 시 pm2 기본. React SPA 프로젝트는 반드시 static 으로 설정
           APP_TYPE=$(get_secret FRONT_APP_TYPE 2>/dev/null || echo "pm2")
@@ -117,8 +115,6 @@ jobs:
           while IFS= read -r line; do
             [ -n "$line" ] && echo "::add-mask::$line"
           done <<< "$SSH_KEY"
-          echo "::add-mask::$CF_CLIENT_ID"
-          echo "::add-mask::$CF_CLIENT_SECRET"
 
           {
             echo "FRONT_SERVER_USER=$SERVER_USER"
@@ -127,8 +123,6 @@ jobs:
             echo "FRONT_TAR_FILE=$TAR_FILE"
             echo "FRONT_APP_TYPE=$APP_TYPE"
             echo "FRONT_SSH_TUNNEL_HOST=$SSH_TUNNEL_HOST"
-            echo "CF_ACCESS_CLIENT_ID=$CF_CLIENT_ID"
-            echo "CF_ACCESS_CLIENT_SECRET=$CF_CLIENT_SECRET"
           } >> $GITHUB_ENV
 
           {
@@ -136,6 +130,27 @@ jobs:
             echo "$SSH_KEY"
             echo "EOF_SSH_KEY"
           } >> $GITHUB_OUTPUT
+
+      - name: Fetch Cloudflare secrets (Shared-Secrets)
+        env:
+          INFISICAL_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          get_cf_secret() {
+            infisical secrets get "$1" \
+              --projectId=${{ env.SHARED_PROJECT_ID }} \
+              --env=${{ steps.env.outputs.infisical_env }} \
+              --path=${{ env.CF_SHARED_PATH }} \
+              --plain \
+              --domain=${{ env.INFISICAL_API_URL }}
+          }
+          CF_CLIENT_ID=$(get_cf_secret CF_ACCESS_CLIENT_ID)
+          CF_CLIENT_SECRET=$(get_cf_secret CF_ACCESS_CLIENT_SECRET)
+          echo "::add-mask::$CF_CLIENT_ID"
+          echo "::add-mask::$CF_CLIENT_SECRET"
+          {
+            echo "CF_ACCESS_CLIENT_ID=$CF_CLIENT_ID"
+            echo "CF_ACCESS_CLIENT_SECRET=$CF_CLIENT_SECRET"
+          } >> $GITHUB_ENV
 
       - name: Fetch Slack secrets (Shared-Secrets)
         id: slack
@@ -199,14 +214,22 @@ jobs:
       - name: Compress build artifacts
         working-directory: apps/front
         run: |
-          tar -czvf "${FRONT_TAR_FILE}" \
-            .next \
-            node_modules \
-            public \
-            "${{ steps.env.outputs.env_file }}" \
-            package.json \
-            next.config.* \
-            ecosystem.config.* 2>/dev/null || true
+          if [ "${FRONT_APP_TYPE}" = "static" ]; then
+            # React SPA (CRA/Vite): 빌드 결과물만 패키징. 서버에서 Nginx가 서빙
+            tar -czvf "${FRONT_TAR_FILE}" \
+              build \
+              "${{ steps.env.outputs.env_file }}" 2>/dev/null || true
+          else
+            # Next.js SSR: .next + node_modules + PM2 설정 패키징
+            tar -czvf "${FRONT_TAR_FILE}" \
+              .next \
+              node_modules \
+              public \
+              "${{ steps.env.outputs.env_file }}" \
+              package.json \
+              next.config.* \
+              ecosystem.config.* 2>/dev/null || true
+          fi
 
       - name: Create GitHub Deployment
         id: gh-deployment
