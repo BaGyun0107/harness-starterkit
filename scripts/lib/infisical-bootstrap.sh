@@ -91,12 +91,13 @@ _ifc_login() {
 # 이름이 같은 프로젝트가 있으면 그 ID를 재사용. 없으면 POST로 생성.
 _ifc_get_or_create_project() {
   local project_name="$1"
+  # 목록 조회는 /api/v1/workspace (v2 GET은 미존재), 생성은 /api/v2/workspace (POST)
   local list_resp
-  list_resp=$(curl -sS "${INFISICAL_API_URL}/api/v2/workspace" \
+  list_resp=$(curl -sS "${INFISICAL_API_URL}/api/v1/workspace" \
     -H "Authorization: Bearer ${_IFC_TOKEN}")
   local existing_id
   existing_id=$(echo "$list_resp" | jq -er --arg n "$project_name" \
-    '.workspaces[]? | select(.name == $n) | .id' 2>/dev/null | head -1 || true)
+    '.workspaces[]? | select(.name == $n or .slug == $n) | .id' 2>/dev/null | head -1 || true)
   if [ -n "$existing_id" ]; then
     info "  기존 프로젝트 재사용: $project_name (id=$existing_id)"
     _IFC_PROJECT_ID="$existing_id"
@@ -153,7 +154,7 @@ _ifc_create_folder() {
     '{projectId:$pid, environment:$env, path:$p, name:$n}')
   local resp http_code
   http_code=$(curl -sS -o /tmp/_ifc_folder.json -w "%{http_code}" \
-    -X POST "${INFISICAL_API_URL}/api/v1/folders" \
+    -X POST "${INFISICAL_API_URL}/api/v2/folders" \
     -H "Authorization: Bearer ${_IFC_TOKEN}" \
     -H "Content-Type: application/json" \
     --data "$body")
