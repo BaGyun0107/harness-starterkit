@@ -2,9 +2,11 @@
 name: init-project
 description: |
   프로젝트 초기화 오케스트레이터. 모노레포 직접 배포(B방식)로 dev-{project} 레포를
-  생성하고, apps/front(Next.js) + apps/back(Express) 스캐폴딩, Infisical 프로젝트 연결,
-  GitHub Secrets 등록까지 한 번에 처리한다. 기존 별도 레포(front-*/back-*)를 git subtree
-  add로 모노레포에 통합하는 시나리오도 지원한다.
+  생성하고, apps/front(Next.js) + apps/back(Express) 스캐폴딩, Infisical 프로젝트 연동
+  (사용자가 UI에서 미리 만든 프로젝트의 Project ID로 .infisical.json + 워크플로우
+  _PROJECT_ID_ 자동 치환), GitHub Secrets 등록까지 한 번에 처리한다.
+  기존 별도 레포(front-*/back-*)를 git subtree add로 모노레포에 통합하는 시나리오도
+  지원한다.
   "프로젝트 초기화", "새 프로젝트 만들기", "init project", "프로젝트 세팅", "프로젝트 셋업",
   "환경 설정", "boilerplate", "스캐폴딩", "기존 레포 합치기", "dev 레포에 통합" 등의 맥락에서
   반드시 이 스킬을 사용한다. 사용자가 단순히 "프로젝트 시작" 같은 말만 해도 이 스킬이
@@ -41,9 +43,10 @@ description: |
   │           + Infisical Project ID / Machine Identity 수집
   │           + Front 배포 방식 (Vercel / PM2 / Docker)
   │           + Back 배포 방식 (PM2 / Docker)
-  ├── Step 5: Infisical 연결 — .infisical.json workspaceId 치환
+  ├── Step 5: Infisical 연결 — .infisical.json 생성 (Step 7의 sed 치환과 멱등)
   ├── Step 6: Git 초기화 / 커밋
   ├── Step 7: scripts/init-project.sh 실행 — dev 레포 생성 + Secrets 등록
+  │           + .infisical.json / 워크플로우 _PROJECT_ID_ 자동 치환
   └── Step 8: 완료 안내 — Vercel 연결, Infisical 시크릿 입력 등 수동 작업
 ```
 
