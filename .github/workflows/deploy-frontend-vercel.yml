@@ -33,7 +33,7 @@ concurrency:
 
 env:
   INFISICAL_API_URL: https://env.co-di.com
-  INFISICAL_PROJECT_ID: 8c2a354e-1dea-4a0c-bb74-5d249e3580b9
+  INFISICAL_PROJECT_ID: _PROJECT_ID_
   SHARED_PROJECT_ID: 7b0a2f95-2d6b-4510-a6b7-029b2f8dfe10
   NODE_VERSION: '24'
   # Vercel CLI 버전 고정 (재현성 + 설치 캐시 가능)
