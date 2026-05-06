@@ -83,43 +83,46 @@ Step 0/1의 감지 결과로 어느 시나리오인지 즉시 판단한다. 상�
 스킬 실행 전 다음이 준비되어 있어야 한다. 누락 시 Step 7(`init-project.sh`)에서 실패한다.
 
 1. **GitHub CLI 로그인:** `gh auth status`로 확인
-2. **Org Admin 권한 Machine Identity (Universal Auth):** https://env.co-di.com 에서 발급
+2. **Infisical 프로젝트 미리 생성됨:** https://env.co-di.com 에서
+   - 프로젝트 생성: `dev-{project}`
+   - dev 환경에 폴더 4개 생성: `/backend`, `/backend/github-actions`, `/frontend`, `/frontend/github-actions`
+   - 각 폴더에 필요한 시크릿 등록 (실제 값 또는 빈 값으로 placeholder)
+   - Project Settings → Project ID 복사 (Step 4-4에서 사용)
+3. **CI/CD 런타임용 Machine Identity (Universal Auth):**
    - Organization Access Control > Machine Identities > Create
-   - Auth Method: **Universal Auth**, Client Secret TTL: 0
-   - **Organization-level Admin role** 부여 (이게 있어야 프로젝트 생성 + self-add 자동화 가능)
-   - 다음 3개 값 확보: `Client ID`, `Client Secret`, `Identity ID` (UUID)
-3. **대상 Organization 레포 생성 권한:** 일반적으로 `CODIWORKS-Engineer`
-4. **(옵션) Infisical CLI 로컬 설치:** `brew install infisical/get-cli/infisical` — 없어도 CI는 동작하지만 로컬 개발에 필요
-5. **(옵션) `jq` 설치:** Infisical 자동 부트스트랩에 필요 — `brew install jq`
+   - Auth Method: **Universal Auth**, TTL: 0
+   - 위에서 만든 프로젝트와 Shared-Secrets에 Read 권한 부여
+   - `Client ID` / `Client Secret` 확보 (Step 4-5에서 사용)
+4. **대상 Organization 레포 생성 권한:** 일반적으로 `CODIWORKS-Engineer`
+5. **(옵션) Infisical CLI 로컬 설치:** `brew install infisical/get-cli/infisical` — 없어도 CI는 동작하지만 로컬 개발에 필요
 
 ### 자동화되는 항목 vs 수동 항목
 
-`INFISICAL_CLIENT_ID`, `INFISICAL_CLIENT_SECRET`, `INFISICAL_IDENTITY_ID` 3개 환경변수가 export되어 있으면 다음이 자동 처리된다:
+| 항목 | 자동 | 수동 |
+|------|------|------|
+| GitHub 레포 `dev-{name}` 생성 | ✅ | |
+| `codi-engineers` 팀 admin 권한 | ✅ | |
+| GitHub Secrets `INFISICAL_CLIENT_ID/SECRET` 등록 | ✅ | |
+| `main`/`dev` 브랜치 push | ✅ | |
+| `apps/{back,front}/.infisical.json` workspaceId 치환 | ✅ (`INFISICAL_PROJECT_ID` export 시) | |
+| `.github/workflows/deploy-*.yml`의 `_PROJECT_ID_` 치환 | ✅ (`INFISICAL_PROJECT_ID` export 시) | |
+| **Infisical 프로젝트 / 폴더 / 시크릿 생성** | | ❌ UI에서 |
+| **팀원 프로젝트 Join (admin/member)** | | ❌ UI에서 |
+| **워크플로우 `_CF_SHARED_PATH_` 입력** | | ❌ 직접 수정 |
+| **Shared-Secrets 권한 부여** | | ❌ Infisical UI |
+| **Vercel 프로젝트 import + Git Disconnect** | | ❌ Vercel UI |
 
-| 항목 | 자동 |
-|------|------|
-| Infisical 프로젝트 생성 (`dev-{name}`) | ✅ |
-| Machine Identity를 admin으로 self-add | ✅ |
-| `dev` 환경에 폴더 4개 생성 | ✅ |
-| 폴더별 표준 키를 빈 placeholder로 등록 | ✅ |
-| `apps/back/.infisical.json` / `apps/front/.infisical.json` workspaceId 치환 | ✅ |
-| GitHub Secrets `INFISICAL_CLIENT_ID/SECRET` 등록 | ✅ |
-| **placeholder 키들의 실제 값 입력** | ❌ (UI에서 직접) |
-| **Vercel 프로젝트 import + Git Disconnect** | ❌ (Vercel UI) |
-| **Shared-Secrets 프로젝트 Read 권한 부여** | ❌ (Infisical UI) |
-
-3개 환경변수 중 하나라도 없으면 모든 Infisical 작업이 수동 안내로 폴백한다.
+`INFISICAL_PROJECT_ID`가 없으면 `_PROJECT_ID_` placeholder가 그대로 남는다. 나중에 Project ID를 받은 후 환경변수만 export하고 `init-project.sh`를 다시 실행하면 치환된다 (idempotent).
 
 ### 환경변수 export 예시
 
 ```bash
+# Infisical UI에서 미리 만든 프로젝트의 ID
+export INFISICAL_PROJECT_ID="..."
+
+# CI/CD 런타임용 Machine Identity (Read 권한)
 export INFISICAL_CLIENT_ID="..."
 export INFISICAL_CLIENT_SECRET="..."
-export INFISICAL_IDENTITY_ID="..."     # Machine Identity의 ID (UUID)
-# 선택: 기본 https://env.co-di.com 이외 self-hosted 사용 시
-# export INFISICAL_API_URL="https://env.co-di.com"
-# 선택: Identity가 여러 조직에 걸쳐있을 때
-# export INFISICAL_ORG_SLUG="..."
 ```
 
 ## 주의사항
