@@ -201,6 +201,22 @@ else
       info "  $cfg workspaceId 치환 완료"
     fi
   done
+
+  # 워크플로우 env 블록의 _PROJECT_ID_ placeholder 치환
+  WF_REPLACED=0
+  for wf in .github/workflows/deploy-frontend-vercel.yml \
+            .github/workflows/deploy-frontend-pm2.yml \
+            .github/workflows/deploy-frontend-docker.yml \
+            .github/workflows/deploy-backend-pm2.yml \
+            .github/workflows/deploy-backend-docker.yml; do
+    if [ -f "$wf" ] && grep -q "_PROJECT_ID_" "$wf"; then
+      replace_in_file "s|_PROJECT_ID_|${INFISICAL_PROJECT_ID}|g" "$wf"
+      WF_REPLACED=$((WF_REPLACED + 1))
+    fi
+  done
+  if [ "$WF_REPLACED" -gt 0 ]; then
+    info "  워크플로우 ${WF_REPLACED}개 파일의 INFISICAL_PROJECT_ID 치환 완료"
+  fi
 fi
 
 # ══════════════════════════════════════════════════════════
@@ -279,19 +295,30 @@ if [ "${INFISICAL_AUTO_BOOTSTRAP:-0}" = "1" ]; then
   echo "    /frontend/                  NEXT_PUBLIC_API_URL"
   echo "    /frontend/github-actions/   VERCEL_ORG_ID, VERCEL_PROJECT_ID"
   echo ""
+  echo "  워크플로우 INFISICAL_PROJECT_ID 자동 치환됨:"
+  echo "    .github/workflows/deploy-{frontend,backend}-*.yml"
+  echo ""
   echo "════════════════════════════════════════════════════════════"
   echo -e "${YELLOW}  수동 설정 필요${NC}"
   echo "════════════════════════════════════════════════════════════"
   echo ""
-  echo "  1. 등록된 placeholder 키들의 실제 값 입력 (${INFISICAL_API_URL}):"
+  echo "  1. env.co-di.com에서 'All Projects' → 새 프로젝트 'dev-${PROJECT_NAME}' Join:"
+  echo "     - ai@co-di.com 은 admin"
+  echo "     - dev@co-di.com, su@co-di.com, design@co-di.com 은 member"
+  echo ""
+  echo "  2. 등록된 placeholder 키들의 실제 값 입력 (${INFISICAL_API_URL}):"
   echo "     - 위 4개 폴더의 키들은 빈 값으로 등록되어 있음. UI에서 값 채우기."
   echo ""
-  echo "  2. Shared-Secrets 프로젝트 접근 권한 (Slack/Vercel 공용):"
+  echo "  3. 워크플로우 _CF_SHARED_PATH_ 직접 수정:"
+  echo "     - .github/workflows/deploy-*.yml 5개 파일의 _CF_SHARED_PATH_ 자리에"
+  echo "       이 프로젝트가 사용할 Cloudflare 시크릿 path 입력 (예: /cloudflare/<env>)"
+  echo ""
+  echo "  4. Shared-Secrets 프로젝트 접근 권한 (Slack/Vercel 공용):"
   echo "     - /slack/      (slack_bot_token, slack_channel)"
   echo "     - /vercel/     (VERCEL_TOKEN)"
   echo "     - Machine Identity에 Shared-Secrets 프로젝트 Read 권한 부여"
   echo ""
-  echo "  3. Vercel 프로젝트 연결 (${ORG}/dev-${PROJECT_NAME}):"
+  echo "  5. Vercel 프로젝트 연결 (${ORG}/dev-${PROJECT_NAME}):"
   echo "     - Vercel 대시보드에서 New Project → 레포 import"
   echo "     - Root Directory: apps/front"
   echo "     - main → Production, dev → Preview"
