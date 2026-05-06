@@ -494,10 +494,14 @@ B방식의 `init-project.sh`는 **단순**하다. `--mode`, `--front-org`, `--ba
 **`init-project.sh`가 수행하는 것:**
 1. `dev-{project}` 레포 생성 (이미 존재하면 건너뜀 — 안전)
 2. `codi-engineers` 팀 admin 권한 부여
-3. `.infisical.json` workspaceId 치환 (환경변수가 있는 경우)
+3. Infisical 설정 치환 (`INFISICAL_PROJECT_ID` 환경변수가 있는 경우):
+   - `apps/{back,front}/.infisical.json` 의 `workspaceId`
+   - `.github/workflows/deploy-*.yml` 5개 파일의 `_PROJECT_ID_` placeholder
 4. GitHub Secrets 등록: `INFISICAL_CLIENT_ID`, `INFISICAL_CLIENT_SECRET`
 5. Git remote → `dev-{project}` 설정
 6. `main`, `dev` 브랜치 생성 + push
+
+**워크플로우의 `_CF_SHARED_PATH_`는 자동 치환되지 않는다.** 프로젝트마다 가변값이라 개발자가 직접 수정해야 한다 (예: `/cloudflare/<env>`). Step 8 완료 메시지에서도 안내된다.
 
 ## Step 8: 완료 안내
 
@@ -549,9 +553,14 @@ B방식의 `init-project.sh`는 **단순**하다. `--mode`, `--front-org`, `--ba
      - (Shared) /slack/            slack_bot_token, slack_channel
      - (Shared) /vercel/           VERCEL_TOKEN
 
-  3. Infisical → Vercel Integration (권장)
+  3. 워크플로우 _CF_SHARED_PATH_ 직접 수정
+     - .github/workflows/deploy-*.yml 5개 파일의 _CF_SHARED_PATH_ 자리에
+       이 프로젝트가 사용할 Cloudflare 시크릿 path 입력 (예: /cloudflare/<env>)
+     - 프로젝트마다 가변값이라 자동 치환되지 않음
 
-  4. 배포 서버 사전 준비
+  4. Infisical → Vercel Integration (권장)
+
+  5. 배포 서버 사전 준비
      - Node.js, PM2 설치 (PM2 방식)
      - SSH authorized_keys 에 공개키 등록 (CONTRIBUTING.md "배포용 SSH 키 생성" 참조)
      - Cloudflare Tunnel 설정 (docs/cloudflare-tunnel-ssh-guide.md 참조)

@@ -162,16 +162,21 @@ gh api -X PUT "orgs/${ORG}/teams/${TEAM_SLUG}/repos/${ORG}/dev-${PROJECT_NAME}" 
   || warn "  팀 권한 추가 실패 — 수동 등록 필요"
 
 # ══════════════════════════════════════════════════════════
-#  Step 3: .infisical.json 프로젝트 ID 치환 (선택)
+#  Step 3: Infisical 설정 치환 (.infisical.json + 워크플로우)
 # ══════════════════════════════════════════════════════════
-info "Step 3/${TOTAL_STEPS}: Infisical 설정 파일 확인..."
+info "Step 3/${TOTAL_STEPS}: Infisical 설정 치환..."
 
 INFISICAL_PROJECT_ID="${INFISICAL_PROJECT_ID:-}"
 
 if [ -z "$INFISICAL_PROJECT_ID" ]; then
   warn "INFISICAL_PROJECT_ID 환경변수가 없습니다."
-  echo "  apps/back/.infisical.json, apps/front/.infisical.json 의 workspaceId를 수동 수정하거나,"
-  echo "  'cd apps/back && infisical init' 으로 대화형으로 설정하세요."
+  echo "  Infisical UI(${INFISICAL_API_URL})에서 다음을 미리 준비하세요:"
+  echo "    1. 프로젝트 생성: dev-${PROJECT_NAME}"
+  echo "    2. dev 환경에 폴더 생성: /backend, /backend/github-actions,"
+  echo "                              /frontend, /frontend/github-actions"
+  echo "    3. Project Settings → Copy Project ID"
+  echo "    4. export INFISICAL_PROJECT_ID=<copied-id> 후 이 스크립트 재실행"
+  echo "  또는 .infisical.json/워크플로우의 _PROJECT_ID_ 를 직접 수정해도 됩니다."
 else
   for cfg in "apps/back/.infisical.json" "apps/front/.infisical.json"; do
     if [ -f "$cfg" ]; then
@@ -179,6 +184,22 @@ else
       info "  $cfg workspaceId 치환 완료"
     fi
   done
+
+  # 워크플로우 env 블록의 _PROJECT_ID_ placeholder 치환
+  WF_REPLACED=0
+  for wf in .github/workflows/deploy-frontend-vercel.yml \
+            .github/workflows/deploy-frontend-pm2.yml \
+            .github/workflows/deploy-frontend-docker.yml \
+            .github/workflows/deploy-backend-pm2.yml \
+            .github/workflows/deploy-backend-docker.yml; do
+    if [ -f "$wf" ] && grep -q "_PROJECT_ID_" "$wf"; then
+      replace_in_file "s|_PROJECT_ID_|${INFISICAL_PROJECT_ID}|g" "$wf"
+      WF_REPLACED=$((WF_REPLACED + 1))
+    fi
+  done
+  if [ "$WF_REPLACED" -gt 0 ]; then
+    info "  워크플로우 ${WF_REPLACED}개 파일의 INFISICAL_PROJECT_ID 치환 완료"
+  fi
 fi
 
 # ══════════════════════════════════════════════════════════
@@ -248,33 +269,45 @@ echo -e "${YELLOW}  수동 설정 필요${NC}"
 echo "════════════════════════════════════════════════════════════"
 echo ""
 echo "  1. Infisical 프로젝트 준비 (${INFISICAL_API_URL}):"
-echo "     - 프로젝트 생성 또는 기존 프로젝트 사용"
-echo "     - /backend/             런타임 .env 시크릿 (DATABASE_URL, JWT_SECRET 등)"
-echo "     - /backend/github-actions/"
-echo "         BACK_SERVER_HOST / BACK_SERVER_USER / BACK_DEPLOY_DIR"
-echo "         BACK_APP_NAME / BACK_TAR_FILE / BACK_SSH_PRIVATE_KEY"
-echo "         BACK_APP_TYPE (선택: pm2|static, 기본 pm2)"
-echo "     - /frontend/            런타임 Vercel 시크릿 (NEXT_PUBLIC_* 등)"
-echo "     - /frontend/github-actions/"
-echo "         VERCEL_ORG_ID / VERCEL_PROJECT_ID"
+echo "     - 프로젝트 생성: dev-${PROJECT_NAME}"
+echo "     - dev 환경에 폴더 + 시크릿 등록:"
+echo "       /backend/                   DATABASE_URL, JWT_SECRET, JWT_REFRESH_SECRET, NODE_ENV, PORT"
+echo "       /backend/github-actions/    BACK_SERVER_HOST, BACK_SERVER_USER, BACK_DEPLOY_DIR,"
+echo "                                   BACK_APP_NAME, BACK_TAR_FILE, BACK_SSH_PRIVATE_KEY,"
+echo "                                   BACK_APP_TYPE (선택: pm2|static, 기본 pm2)"
+echo "       /frontend/                  NEXT_PUBLIC_*"
+echo "       /frontend/github-actions/   VERCEL_ORG_ID, VERCEL_PROJECT_ID"
+if [ -z "$INFISICAL_PROJECT_ID" ]; then
+  echo ""
+  echo "     - Project Settings → Copy Project ID 후"
+  echo "       export INFISICAL_PROJECT_ID=<id> 다음 이 스크립트를 다시 실행하면"
+  echo "       .infisical.json / 워크플로우의 _PROJECT_ID_ 가 자동 치환됩니다."
+fi
 echo ""
-echo "  2. Machine Identity 생성 (${INFISICAL_API_URL}):"
-echo "     - Organization Access Control > Machine Identities > Create"
-echo "     - Auth Method: Universal Auth"
-echo "     - Client Secret 발급 (TTL: 0)"
-echo "     - 생성한 Identity를 해당 프로젝트들에 Role 추가 (Read 권한)"
+echo "  2. 팀원 Join (env.co-di.com → All Projects → dev-${PROJECT_NAME}):"
+echo "     - ai@co-di.com 은 admin"
+echo "     - dev@co-di.com, su@co-di.com, design@co-di.com 은 member"
 echo ""
-echo "  3. Shared-Secrets 프로젝트 접근 권한 (Slack/Vercel 공용):"
+echo "  3. Machine Identity (CI/CD 런타임용) 생성 또는 재사용:"
+echo "     - Organization Access Control > Machine Identities"
+echo "     - Auth Method: Universal Auth, TTL: 0"
+echo "     - 이 프로젝트에 Read 권한 부여"
+echo "     - Client ID/Secret을 GitHub Secrets에 등록 (Step 4에서 자동 처리됨)"
+echo ""
+echo "  4. 워크플로우 _CF_SHARED_PATH_ 직접 수정:"
+echo "     - .github/workflows/deploy-*.yml 5개 파일의 _CF_SHARED_PATH_ 자리에"
+echo "       이 프로젝트가 사용할 Cloudflare 시크릿 path 입력 (예: /cloudflare/<env>)"
+echo ""
+echo "  5. Shared-Secrets 프로젝트 접근 권한 (Slack/Vercel 공용):"
 echo "     - /slack/      (slack_bot_token, slack_channel)"
 echo "     - /vercel/     (VERCEL_TOKEN)"
 echo "     - Machine Identity에 Shared-Secrets 프로젝트 Read 권한 부여"
 echo ""
-echo "  4. Vercel 프로젝트 연결 (${ORG}/dev-${PROJECT_NAME}):"
-echo "     - Vercel 대시보드에서 New Project"
-echo "     - ${ORG}/dev-${PROJECT_NAME} 레포 import"
+echo "  6. Vercel 프로젝트 연결 (${ORG}/dev-${PROJECT_NAME}):"
+echo "     - Vercel 대시보드에서 New Project → 레포 import"
 echo "     - Root Directory: apps/front"
 echo "     - main → Production, dev → Preview"
-echo "     - Settings > Git > Disconnect (GitHub Actions로 배포할 것이므로)"
+echo "     - Settings > Git > Disconnect (GitHub Actions로 배포)"
 echo "     - Infisical > Integrations > Vercel 연결 (자동 env 동기화)"
 echo ""
 echo "════════════════════════════════════════════════════════════"

@@ -2,9 +2,11 @@
 name: init-project
 description: |
   프로젝트 초기화 오케스트레이터. 모노레포 직접 배포(B방식)로 dev-{project} 레포를
-  생성하고, apps/front(Next.js) + apps/back(Express) 스캐폴딩, Infisical 프로젝트 연결,
-  GitHub Secrets 등록까지 한 번에 처리한다. 기존 별도 레포(front-*/back-*)를 git subtree
-  add로 모노레포에 통합하는 시나리오도 지원한다.
+  생성하고, apps/front(Next.js) + apps/back(Express) 스캐폴딩, Infisical 프로젝트 연동
+  (사용자가 UI에서 미리 만든 프로젝트의 Project ID로 .infisical.json + 워크플로우
+  _PROJECT_ID_ 자동 치환), GitHub Secrets 등록까지 한 번에 처리한다.
+  기존 별도 레포(front-*/back-*)를 git subtree add로 모노레포에 통합하는 시나리오도
+  지원한다.
   "프로젝트 초기화", "새 프로젝트 만들기", "init project", "프로젝트 세팅", "프로젝트 셋업",
   "환경 설정", "boilerplate", "스캐폴딩", "기존 레포 합치기", "dev 레포에 통합" 등의 맥락에서
   반드시 이 스킬을 사용한다. 사용자가 단순히 "프로젝트 시작" 같은 말만 해도 이 스킬이
@@ -41,9 +43,10 @@ description: |
   │           + Infisical Project ID / Machine Identity 수집
   │           + Front 배포 방식 (Vercel / PM2 / Docker)
   │           + Back 배포 방식 (PM2 / Docker)
-  ├── Step 5: Infisical 연결 — .infisical.json workspaceId 치환
+  ├── Step 5: Infisical 연결 — .infisical.json 생성 (Step 7의 sed 치환과 멱등)
   ├── Step 6: Git 초기화 / 커밋
   ├── Step 7: scripts/init-project.sh 실행 — dev 레포 생성 + Secrets 등록
+  │           + .infisical.json / 워크플로우 _PROJECT_ID_ 자동 치환
   └── Step 8: 완료 안내 — Vercel 연결, Infisical 시크릿 입력 등 수동 작업
 ```
 
@@ -83,10 +86,47 @@ Step 0/1의 감지 결과로 어느 시나리오인지 즉시 판단한다. 상�
 스킬 실행 전 다음이 준비되어 있어야 한다. 누락 시 Step 7(`init-project.sh`)에서 실패한다.
 
 1. **GitHub CLI 로그인:** `gh auth status`로 확인
-2. **Infisical 프로젝트 생성됨:** https://env.co-di.com 에서 미리 생성, Project ID 확보
-3. **Infisical Machine Identity (Universal Auth):** Client ID/Secret 발급 완료
+2. **Infisical 프로젝트 미리 생성됨:** https://env.co-di.com 에서
+   - 프로젝트 생성: `dev-{project}`
+   - dev 환경에 폴더 4개 생성: `/backend`, `/backend/github-actions`, `/frontend`, `/frontend/github-actions`
+   - 각 폴더에 필요한 시크릿 등록 (실제 값 또는 빈 값으로 placeholder)
+   - Project Settings → Project ID 복사 (Step 4-4에서 사용)
+3. **CI/CD 런타임용 Machine Identity (Universal Auth):**
+   - Organization Access Control > Machine Identities > Create
+   - Auth Method: **Universal Auth**, TTL: 0
+   - 위에서 만든 프로젝트와 Shared-Secrets에 Read 권한 부여
+   - `Client ID` / `Client Secret` 확보 (Step 4-5에서 사용)
 4. **대상 Organization 레포 생성 권한:** 일반적으로 `CODIWORKS-Engineer`
 5. **(옵션) Infisical CLI 로컬 설치:** `brew install infisical/get-cli/infisical` — 없어도 CI는 동작하지만 로컬 개발에 필요
+
+### 자동화되는 항목 vs 수동 항목
+
+| 항목 | 자동 | 수동 |
+|------|------|------|
+| GitHub 레포 `dev-{name}` 생성 | ✅ | |
+| `codi-engineers` 팀 admin 권한 | ✅ | |
+| GitHub Secrets `INFISICAL_CLIENT_ID/SECRET` 등록 | ✅ | |
+| `main`/`dev` 브랜치 push | ✅ | |
+| `apps/{back,front}/.infisical.json` workspaceId 치환 | ✅ (`INFISICAL_PROJECT_ID` export 시) | |
+| `.github/workflows/deploy-*.yml`의 `_PROJECT_ID_` 치환 | ✅ (`INFISICAL_PROJECT_ID` export 시) | |
+| **Infisical 프로젝트 / 폴더 / 시크릿 생성** | | ❌ UI에서 |
+| **팀원 프로젝트 Join (admin/member)** | | ❌ UI에서 |
+| **워크플로우 `_CF_SHARED_PATH_` 입력** | | ❌ 직접 수정 |
+| **Shared-Secrets 권한 부여** | | ❌ Infisical UI |
+| **Vercel 프로젝트 import + Git Disconnect** | | ❌ Vercel UI |
+
+`INFISICAL_PROJECT_ID`가 없으면 `_PROJECT_ID_` placeholder가 그대로 남는다. 나중에 Project ID를 받은 후 환경변수만 export하고 `init-project.sh`를 다시 실행하면 치환된다 (idempotent).
+
+### 환경변수 export 예시
+
+```bash
+# Infisical UI에서 미리 만든 프로젝트의 ID
+export INFISICAL_PROJECT_ID="..."
+
+# CI/CD 런타임용 Machine Identity (Read 권한)
+export INFISICAL_CLIENT_ID="..."
+export INFISICAL_CLIENT_SECRET="..."
+```
 
 ## 주의사항
 
