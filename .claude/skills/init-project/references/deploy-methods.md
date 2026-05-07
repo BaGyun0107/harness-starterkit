@@ -130,8 +130,9 @@ push 후 GitHub Actions에서:
 1. `deploy-frontend-vercel.yml`의 `push:` 주석 처리
 2. `deploy-frontend-pm2.yml`의 `push:` 주석 해제
 3. 서버에 Node.js, PM2, Nginx 설치
-4. Infisical `/frontend/github-actions/` 경로에 `FRONT_SERVER_HOST`, `FRONT_SERVER_USER`, `FRONT_DEPLOY_DIR`, `FRONT_APP_NAME`, `FRONT_TAR_FILE`, `FRONT_SSH_PRIVATE_KEY` 등록
-5. 서버에 **범용 배포 스크립트**(`~/server-deploy.sh`)를 단 한 번만 배치 — 프로젝트/환경별 스크립트 복사 불필요. 값은 워크플로우가 인자로 전달
+4. Infisical `/frontend/github-actions/` 경로에 `FRONT_SSH_TUNNEL_HOST`, `FRONT_BASTION_USER`, `FRONT_BASTION_PORT`, `FRONT_TARGET_HOST`, `FRONT_TARGET_PORT`, `FRONT_SERVER_USER`, `FRONT_DEPLOY_DIR`, `FRONT_APP_NAME`, `FRONT_TAR_FILE`, `FRONT_SSH_PRIVATE_KEY` 등록
+5. Shared-Secrets `_CF_SHARED_PATH_` 경로에 `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET` 확인 (도메인당 1회 등록 후 재사용 — `docs/cloudflare-tunnel-ssh-guide.md` 시나리오 A 참조)
+6. 서버에 **범용 배포 스크립트**(`~/server-deploy.sh`)를 단 한 번만 배치 — 프로젝트/환경별 스크립트 복사 불필요. 값은 워크플로우가 인자로 전달
 
 ### Vercel → Docker
 
@@ -139,7 +140,7 @@ push 후 GitHub Actions에서:
 2. `deploy-frontend-docker.yml`의 `push:` 주석 해제
 3. 서버에 Docker + docker-compose 설치
 4. `apps/front/Dockerfile`, `apps/front/docker-compose.yml` 준비
-5. Infisical에 `FRONT_SERVER_HOST`, `FRONT_SERVER_USER`, `FRONT_DEPLOY_DIR`, `FRONT_SSH_PRIVATE_KEY` 등록
+5. Infisical `/frontend/github-actions/` 경로에 `FRONT_SSH_TUNNEL_HOST`, `FRONT_BASTION_USER`, `FRONT_BASTION_PORT`, `FRONT_TARGET_HOST`, `FRONT_TARGET_PORT`, `FRONT_SERVER_USER`, `FRONT_DEPLOY_DIR`, `FRONT_SSH_PRIVATE_KEY` 등록 + Shared-Secrets `_CF_SHARED_PATH_`에 `CF_ACCESS_CLIENT_ID/SECRET` 확인
 
 ### PM2 → Vercel
 

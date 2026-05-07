@@ -45,7 +45,7 @@ jobs:
     environment: ${{ inputs.environment || (github.ref_name == 'main' && 'production' || 'development') }}
     permissions:
       contents: read
-      deployments: write  # GitHub Deployment 등록용
+      deployments: write # GitHub Deployment 등록용
     steps:
       - uses: actions/checkout@v4
 
@@ -169,7 +169,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: apps/front
-        run: npm ci --ignore-scripts
+        run: npm install --ignore-scripts
 
       - name: Install Vercel CLI
         run: npm install -g vercel@${{ env.VERCEL_CLI_VERSION }}

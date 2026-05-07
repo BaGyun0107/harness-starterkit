@@ -1,4 +1,4 @@
-# harness
+# dev-liveview
 
 사내 공용 프로젝트 하네스. AI 에이전트 스킬, CI/CD, Git workflow, 모노레포 직접 배포 파이프라인을 포함합니다.
 
@@ -7,8 +7,8 @@
 ```
 dev-{project}  ← 모노레포 1개 (개발 + 배포)
   │
-  ├── apps/front/   → GitHub Actions (Vercel CLI) 직접 배포
-  └── apps/back/    → GitHub Actions (SSH/PM2) 직접 배포
+  ├── apps/front/   → 배포 방식 1개 선택 (Vercel | PM2 | Docker)
+  └── apps/back/    → 배포 방식 1개 선택 (PM2 | Docker)
 
 GitHub Secrets (오직 2개):
   - INFISICAL_CLIENT_ID
@@ -18,12 +18,31 @@ Infisical (https://env.co-di.com) ← 나머지 모든 시크릿
   프로젝트별/
     /backend/                    런타임 .env
     /backend/github-actions/     배포 변수 (BACK_*)
-    /frontend/                   Vercel 자동 동기화용 env
-    /frontend/github-actions/    VERCEL_ORG_ID, VERCEL_PROJECT_ID
+    /frontend/                   런타임 / Vercel 자동 동기화 env
+    /frontend/github-actions/    배포 변수 (FRONT_* 또는 VERCEL_*)
   Shared-Secrets/
     /slack/                      slack_bot_token, slack_channel
     /vercel/                     VERCEL_TOKEN
+    /cloudflare/{domain}/{subdomain}/
+                                 CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET
 ```
+
+## SSH 배포 구조 (PM2/Docker 공통)
+
+서버 SSH가 필요한 모든 배포 워크플로우(`deploy-{backend,frontend}-{pm2,docker}.yml`)는 **Cloudflare Tunnel + Bastion** 구조를 통해 22포트 전역 개방 없이 동작합니다.
+
+```
+GitHub Actions
+   ↓ cloudflared access ssh (Service Token)
+Cloudflare Edge → Tunnel
+   ↓
+[Bastion 서버: vpn-1-ga-1.hipasshub.com:9806]   ← deploy 사용자 (셸 차단, ProxyJump 전용)
+   ↓ ProxyJump (TCP 포워딩만)
+[배포 서버 N대: 133.186.216.12:22 등]            ← rocky 사용자
+```
+
+- **Tunnel 1개 + bastion 1대로 다수 배포 서버를 커버** — 새 배포 서버 추가 시 Cloudflare 설정 변경 불필요
+- 새 프로젝트 추가, 새 배포 서버 추가, 새 도메인 셋업 시나리오는 [`docs/cloudflare-tunnel-ssh-guide.md`](docs/cloudflare-tunnel-ssh-guide.md) 참조
 
 ## 새 프로젝트 시작하기
 
@@ -109,64 +128,63 @@ export INFISICAL_CLIENT_SECRET="<client-secret>"
 
 스크립트 완료 후:
 
-1. **Vercel 연결**
+1. **배포 방식 선택** — Frontend는 Vercel/PM2/Docker 중 1개, Backend는 PM2/Docker 중 1개 활성화. `.github/workflows/deploy-*.yml`의 `on: push` 블록 주석 처리/해제로 전환
+2. **(SSH 배포 시) Cloudflare Tunnel + Bastion 셋업** — 가이드 [`docs/cloudflare-tunnel-ssh-guide.md`](docs/cloudflare-tunnel-ssh-guide.md) 시나리오 A 따라 키 등록 + Infisical 변수 입력
+3. **(Vercel 배포 시) Vercel 연결**
    - `ai@co-di.com` 계정으로 Vercel 로그인
    - New Project → `dev-{project}` 레포 선택
    - Root Directory: `./` (빈 값)
    - Framework Preset: Next.js
    - 최초 배포 후 Settings → Git → **Disconnect** (GitHub Actions로 배포하므로)
-
-2. **Infisical 시크릿 입력**
+4. **Infisical 시크릿 입력**
    - `/backend/` → 백엔드 .env (DATABASE_URL, JWT_SECRET 등)
-   - `/backend/github-actions/` → 배포 변수 (BACK_SERVER_HOST, BACK_SSH_PRIVATE_KEY 등)
-   - `/frontend/` → Vercel로 자동 동기화될 환경변수
-
-3. **Infisical → Vercel Integration** (권장)
+   - `/backend/github-actions/` → 배포 변수 (BACK*BASTION*_, BACK*TARGET*_, BACK_SSH_PRIVATE_KEY 등)
+   - `/frontend/` → 런타임 / Vercel로 자동 동기화될 환경변수
+   - `/frontend/github-actions/` → 배포 변수 (FRONT*\* 또는 VERCEL*\*)
+5. **Infisical → Vercel Integration** (Vercel 사용 시 권장)
    - Infisical 프로젝트 → Integrations → Vercel → Connect
    - `/frontend/` 경로를 Vercel 프로젝트에 자동 동기화
 
 ### 개발 시작
 
 ```bash
-# 최초 개발: apps/{back,front}/.env.example 을 복사해서 .env.development 로 사용
-cp apps/back/.env.example  apps/back/.env.development
-cp apps/front/.env.example apps/front/.env.development
+# 로컬 개발 (Infisical 로그인 필요)
+infisical login --domain=https://env.co-di.com  # 최초 1회
 
 cd apps/front && npm run dev    # http://localhost:3000
 cd apps/back && npm run dev     # http://localhost:8080
-
-# Infisical 준비되면 로그인 1회만 하면 자동 전환 (dev-runner.js 가 감지)
-# infisical login --domain=https://env.co-di.com
 
 # 코드 push → 자동 배포
 git push origin dev   # → development 환경 배포
 git push origin main  # → production 환경 배포
 ```
 
-> `npm run dev` 는 `scripts/dev-runner.js` 를 통해 실행된다. Infisical CLI 설치 + 로그인 +
-> `.infisical.json` 유효성을 모두 만족하면 `infisical run` 으로, 하나라도 부족하면 로컬
-> `.env` 로 자동 fallback 한다. `dev:no-infisical` 같은 별도 명령은 필요 없다.
-
 ## 레포 구조
 
 ```
 dev-{project}/
 ├── apps/
-│   ├── front/                  # Next.js 15 (App Router)
-│   │   └── .infisical.json     # Infisical 프로젝트 연결
-│   └── back/                   # Express 5 + Prisma
+│   ├── front/                       # Next.js 15 (App Router)
+│   │   └── .infisical.json          # Infisical 프로젝트 연결
+│   └── back/                        # Express 5 + Prisma
 │       └── .infisical.json
 ├── .github/workflows/
-│   ├── deploy-frontend.yml     # apps/front/** 변경 시 Vercel CLI 배포
-│   └── deploy-backend.yml      # apps/back/** 변경 시 SSH/PM2 배포
+│   ├── deploy-frontend-vercel.yml   # apps/front/** → Vercel CLI 배포
+│   ├── deploy-frontend-pm2.yml      # apps/front/** → SSH(Bastion)/PM2 배포
+│   ├── deploy-frontend-docker.yml   # apps/front/** → SSH(Bastion)/Docker 배포
+│   ├── deploy-backend-pm2.yml       # apps/back/**  → SSH(Bastion)/PM2 배포
+│   └── deploy-backend-docker.yml    # apps/back/**  → SSH(Bastion)/Docker 배포
 ├── scripts/
-│   └── init-project.sh         # 프로젝트 초기화 (dev 레포 1개 + Infisical)
-├── .agents/                    # AI 에이전트 스킬 (oh-my-agent)
-├── .claude/                    # Claude Code 설정 + 스킬
-├── docs/                       # 문서
-├── CONTRIBUTING.md             # 개발 가이드
-└── README.md                   # 이 파일
+│   └── init-project.sh              # 프로젝트 초기화 (dev 레포 1개 + Infisical)
+├── .agents/                         # AI 에이전트 스킬 (oh-my-agent)
+├── .claude/                         # Claude Code 설정 + 스킬
+├── docs/
+│   └── cloudflare-tunnel-ssh-guide.md   # Bastion SSH 배포 상세 가이드
+├── CONTRIBUTING.md                  # 개발 가이드
+└── README.md                        # 이 파일
 ```
+
+> **워크플로우 활성화 규칙**: Frontend는 vercel/pm2/docker 중 **1개만** `on: push` 활성화, Backend는 pm2/docker 중 **1개만** 활성화. 나머지는 `workflow_dispatch`만 남겨 수동 실행용으로 둔다. 두 개가 동시 트리거되면 같은 커밋이 두 경로로 배포되어 충돌한다.
 
 ## 배포 파이프라인 흐름
 
@@ -176,19 +194,17 @@ dev-{project}/
          ▼
 GitHub Actions (paths 필터로 변경 감지)
   │
-  ├── apps/front/** 변경 시
-  │   └── deploy-frontend.yml
-  │        ├── Infisical에서 VERCEL_TOKEN / ORG_ID / PROJECT_ID 조회
-  │        ├── vercel pull → vercel build → vercel deploy
-  │        └── Slack 알림 (start/end)
+  ├── apps/front/** 변경 시 → 활성화된 Frontend 워크플로우 실행
+  │   ├── (Vercel)  Infisical에서 VERCEL_TOKEN/ORG_ID/PROJECT_ID → vercel pull/build/deploy
+  │   ├── (PM2)     Infisical에서 FRONT_* → tar.gz → SSH(Bastion 경유) → 서버 셸스크립트
+  │   └── (Docker)  Infisical에서 FRONT_* → docker save → SSH(Bastion 경유) → docker compose up
   │
-  └── apps/back/** 변경 시
-      └── deploy-backend.yml
-           ├── Infisical에서 BACK_* + 런타임 .env 조회
-           ├── npm ci → prisma generate → build → prune
-           ├── tar.gz → SCP → 서버 쉘스크립트 실행 (PM2 restart)
-           └── Slack 알림 (start/end)
+  └── apps/back/** 변경 시 → 활성화된 Backend 워크플로우 실행
+      ├── (PM2)     Infisical에서 BACK_* + 런타임 .env → tar.gz → SSH(Bastion 경유) → PM2 restart
+      └── (Docker)  Infisical에서 BACK_* + 런타임 .env → docker save → SSH(Bastion 경유) → docker compose up
 ```
+
+SSH 경유 방식(PM2/Docker)의 자세한 흐름은 [`docs/cloudflare-tunnel-ssh-guide.md`](docs/cloudflare-tunnel-ssh-guide.md) 참조.
 
 ## Git Workflow
 
@@ -216,32 +232,33 @@ hotfix/* → 긴급 수정 (main + dev)
 ```
 Infisical Project: {project}
   ├── dev 환경
-  │   ├── /backend/            DATABASE_URL, JWT_SECRET, ...
-  │   ├── /backend/github-actions/
-  │   │   ├── BACK_SERVER_HOST
-  │   │   ├── BACK_SERVER_USER
-  │   │   ├── BACK_DEPLOY_DIR
-  │   │   ├── BACK_APP_NAME
-  │   │   ├── BACK_TAR_FILE
-  │   │   ├── BACK_SSH_PRIVATE_KEY
-  │   │   └── BACK_APP_TYPE            ← 선택 (pm2|static, 기본: pm2)
-  │   ├── /frontend/            NEXT_PUBLIC_*, ...
-  │   └── /frontend/github-actions/
-  │       ├── VERCEL_ORG_ID            ← Vercel 배포 시
-  │       ├── VERCEL_PROJECT_ID        ← Vercel 배포 시
-  │       ├── FRONT_SERVER_HOST        ← PM2/Static 배포 시
-  │       ├── FRONT_SERVER_USER        ← PM2/Static 배포 시
-  │       ├── FRONT_DEPLOY_DIR         ← PM2/Static 배포 시
-  │       ├── FRONT_APP_NAME           ← PM2/Static 배포 시
-  │       ├── FRONT_TAR_FILE           ← PM2/Static 배포 시
-  │       ├── FRONT_SSH_PRIVATE_KEY    ← PM2/Static 배포 시
-  │       └── FRONT_APP_TYPE           ← PM2/Static 배포 시 (pm2: Next SSR, static: React SPA)
+  │   ├── /backend/                       DATABASE_URL, JWT_SECRET, ...
+  │   ├── /backend/github-actions/        (배포 방식에 따라 필요한 키만)
+  │   │   ├── BACK_SSH_TUNNEL_HOST        bastion hostname (= vpn-1-ga-1.hipasshub.com)
+  │   │   ├── BACK_BASTION_USER           bastion 사용자 (= deploy)
+  │   │   ├── BACK_BASTION_PORT           bastion sshd 포트 (= 9806)
+  │   │   ├── BACK_TARGET_HOST            배포 서버 IP
+  │   │   ├── BACK_TARGET_PORT            배포 서버 sshd 포트 (= 22)
+  │   │   ├── BACK_SERVER_USER            배포 서버 사용자 (= rocky)
+  │   │   ├── BACK_SSH_PRIVATE_KEY        프로젝트별 SSH 개인키
+  │   │   ├── BACK_DEPLOY_DIR             배포 작업 디렉터리
+  │   │   ├── BACK_APP_NAME               PM2 앱 이름 (PM2 방식)
+  │   │   ├── BACK_TAR_FILE               빌드 산출물 파일명 (PM2 방식)
+  │   │   └── BACK_APP_TYPE               pm2 (선택, 기본 pm2)
+  │   ├── /frontend/                      NEXT_PUBLIC_*, ...
+  │   └── /frontend/github-actions/       (배포 방식에 따라)
+  │       ├── (Vercel)  VERCEL_ORG_ID, VERCEL_PROJECT_ID
+  │       └── (PM2/Docker)  FRONT_* (BACK_* 와 동일 구조, 변수명만 FRONT_)
   └── prod 환경 (동일 키, 운영 값)
 
 Shared-Secrets 프로젝트 (여러 프로젝트 공용)
-  ├── /slack/     slack_bot_token, slack_channel
-  └── /vercel/    VERCEL_TOKEN
+  ├── /slack/                                slack_bot_token, slack_channel
+  ├── /vercel/                               VERCEL_TOKEN
+  └── /cloudflare/{domain}/{subdomain}/      CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET
+                                             (예: /cloudflare/hipasshub-com/vpn-1-ga-1-token)
 ```
+
+> **Cloudflare Access 토큰**은 워크플로우가 `Shared-Secrets/cloudflare/{domain}/{subdomain}/`에서 자동 조회한다. 프로젝트 Infisical에 따로 복사 금지.
 
 ## 주요 Claude Code 스킬
 
