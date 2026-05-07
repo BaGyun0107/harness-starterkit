@@ -538,20 +538,29 @@ B방식의 `init-project.sh`는 **단순**하다. `--mode`, `--front-org`, `--ba
      ⚡ 템플릿: apps/back/.env.example, apps/front/.env.example 에 최소 필요 변수가
         정의되어 있다. 이 파일을 열어 key 목록을 참고하면서 Infisical 에 등록한다.
      - /backend/                   런타임 .env (apps/back/.env.example 참고)
-     - /backend/github-actions/    BACK_SSH_TUNNEL_HOST, BACK_SERVER_USER,
-                                   BACK_DEPLOY_DIR, BACK_APP_NAME,
-                                   BACK_TAR_FILE, BACK_SSH_PRIVATE_KEY,
-                                   BACK_APP_TYPE (선택, 기본 pm2),
-                                   CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET
+     - /backend/github-actions/    BACK_SSH_TUNNEL_HOST  (= bastion hostname)
+                                   BACK_BASTION_USER     (= deploy)
+                                   BACK_BASTION_PORT     (= bastion sshd 포트)
+                                   BACK_TARGET_HOST      (= 실제 배포 서버 IP)
+                                   BACK_TARGET_PORT      (= 배포 서버 sshd 포트)
+                                   BACK_SERVER_USER      (= 배포 서버 사용자)
+                                   BACK_DEPLOY_DIR, BACK_APP_NAME, BACK_TAR_FILE,
+                                   BACK_SSH_PRIVATE_KEY,
+                                   BACK_APP_TYPE (선택, 기본 pm2)
      - /frontend/                  NEXT_PUBLIC_* (apps/front/.env.example 참고)
      - /frontend/github-actions/   (Vercel 배포 시)   VERCEL_ORG_ID, VERCEL_PROJECT_ID
-                                   (PM2/Static 배포 시) FRONT_SSH_TUNNEL_HOST, FRONT_SERVER_USER,
+                                   (PM2/Static 배포 시) FRONT_SSH_TUNNEL_HOST, FRONT_BASTION_USER,
+                                                      FRONT_BASTION_PORT, FRONT_TARGET_HOST,
+                                                      FRONT_TARGET_PORT, FRONT_SERVER_USER,
                                                       FRONT_DEPLOY_DIR, FRONT_APP_NAME,
                                                       FRONT_TAR_FILE, FRONT_SSH_PRIVATE_KEY,
-                                                      FRONT_APP_TYPE (pm2 | static),
-                                                      CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET
+                                                      FRONT_APP_TYPE (pm2 | static)
      - (Shared) /slack/            slack_bot_token, slack_channel
      - (Shared) /vercel/           VERCEL_TOKEN
+     - (Shared) _CF_SHARED_PATH_   CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET
+                                   ※ Cloudflare Tunnel Service Token. 도메인당 1개만 등록 후 재사용
+                                   ※ 경로 예: /cloudflare/{domain}/{subdomain}
+                                   ※ 자세한 셋업: docs/cloudflare-tunnel-ssh-guide.md
 
   3. 워크플로우 _CF_SHARED_PATH_ 직접 수정
      - .github/workflows/deploy-*.yml 5개 파일의 _CF_SHARED_PATH_ 자리에

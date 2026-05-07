@@ -106,6 +106,12 @@ jobs:
           DEPLOY_DIR=$(get_secret BACK_DEPLOY_DIR)
           SSH_KEY=$(get_secret BACK_SSH_PRIVATE_KEY)
           SSH_TUNNEL_HOST=$(get_secret BACK_SSH_TUNNEL_HOST)
+          # bastion(점프호스트) 정보
+          BASTION_USER=$(get_secret BACK_BASTION_USER)
+          BASTION_PORT=$(get_secret BACK_BASTION_PORT)
+          # 실제 배포 대상 서버 정보
+          TARGET_HOST=$(get_secret BACK_TARGET_HOST)
+          TARGET_PORT=$(get_secret BACK_TARGET_PORT)
 
           # multiline 값(SSH 키)은 줄 단위로 마스킹해야 로그 노출 방지됨
           while IFS= read -r line; do
@@ -116,6 +122,10 @@ jobs:
             echo "BACK_SERVER_USER=$SERVER_USER"
             echo "BACK_DEPLOY_DIR=$DEPLOY_DIR"
             echo "BACK_SSH_TUNNEL_HOST=$SSH_TUNNEL_HOST"
+            echo "BACK_BASTION_USER=$BASTION_USER"
+            echo "BACK_BASTION_PORT=$BASTION_PORT"
+            echo "BACK_TARGET_HOST=$TARGET_HOST"
+            echo "BACK_TARGET_PORT=$TARGET_PORT"
           } >> $GITHUB_ENV
 
           {
@@ -228,19 +238,32 @@ jobs:
           curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
           chmod +x /usr/local/bin/cloudflared
 
-      - name: Setup SSH via Cloudflare Tunnel
+      # ssh config 구조:
+      #   bastion       : Cloudflare Tunnel 통과 → bastion sshd (셸 차단, ProxyJump 전용)
+      #   deploy-server : bastion을 ProxyJump로 거쳐 실제 배포 서버 도달
+      - name: Setup SSH via Cloudflare Tunnel + Bastion
         run: |
           mkdir -p ~/.ssh
           echo "${{ steps.deploy-secrets.outputs.ssh_key }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           {
-            echo "Host deploy-server"
+            echo "Host bastion"
             echo "  HostName ${BACK_SSH_TUNNEL_HOST}"
-            echo "  User ${BACK_SERVER_USER}"
+            echo "  User ${BACK_BASTION_USER}"
+            echo "  Port ${BACK_BASTION_PORT}"
             echo "  IdentityFile ~/.ssh/deploy_key"
             echo "  StrictHostKeyChecking no"
             echo "  UserKnownHostsFile /dev/null"
             echo "  ProxyCommand cloudflared access ssh --hostname %h --id ${CF_ACCESS_CLIENT_ID} --secret ${CF_ACCESS_CLIENT_SECRET}"
+            echo ""
+            echo "Host deploy-server"
+            echo "  HostName ${BACK_TARGET_HOST}"
+            echo "  User ${BACK_SERVER_USER}"
+            echo "  Port ${BACK_TARGET_PORT}"
+            echo "  IdentityFile ~/.ssh/deploy_key"
+            echo "  StrictHostKeyChecking no"
+            echo "  UserKnownHostsFile /dev/null"
+            echo "  ProxyJump bastion"
           } > ~/.ssh/config
 
       - name: Deploy image & compose file to server

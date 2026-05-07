@@ -13,11 +13,11 @@
 name: Deploy Frontend (PM2)
 
 on:
-  push:
-    branches: [main, dev]
-    paths:
-      - 'apps/front/**'
-      - '.github/workflows/deploy-frontend-pm2.yml'
+  # push:
+  #   branches: [main, dev]
+  #   paths:
+  #     - 'apps/front/**'
+  #     - '.github/workflows/deploy-frontend-pm2.yml'
   workflow_dispatch:
     inputs:
       environment:
@@ -107,6 +107,12 @@ jobs:
           TAR_FILE=$(get_secret FRONT_TAR_FILE)
           SSH_KEY=$(get_secret FRONT_SSH_PRIVATE_KEY)
           SSH_TUNNEL_HOST=$(get_secret FRONT_SSH_TUNNEL_HOST)
+          # bastion(점프호스트) 정보
+          BASTION_USER=$(get_secret FRONT_BASTION_USER)
+          BASTION_PORT=$(get_secret FRONT_BASTION_PORT)
+          # 실제 배포 대상 서버 정보
+          TARGET_HOST=$(get_secret FRONT_TARGET_HOST)
+          TARGET_PORT=$(get_secret FRONT_TARGET_PORT)
           # FRONT_APP_TYPE: pm2 (Next.js SSR 등) | static (React SPA 등)
           # 미지정 시 pm2 기본. React SPA 프로젝트는 반드시 static 으로 설정
           APP_TYPE=$(get_secret FRONT_APP_TYPE 2>/dev/null || echo "pm2")
@@ -123,6 +129,10 @@ jobs:
             echo "FRONT_TAR_FILE=$TAR_FILE"
             echo "FRONT_APP_TYPE=$APP_TYPE"
             echo "FRONT_SSH_TUNNEL_HOST=$SSH_TUNNEL_HOST"
+            echo "FRONT_BASTION_USER=$BASTION_USER"
+            echo "FRONT_BASTION_PORT=$BASTION_PORT"
+            echo "FRONT_TARGET_HOST=$TARGET_HOST"
+            echo "FRONT_TARGET_PORT=$TARGET_PORT"
           } >> $GITHUB_ENV
 
           {
@@ -205,7 +215,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: apps/front
-        run: npm ci --ignore-scripts
+        run: npm install --ignore-scripts
 
       - name: Build
         working-directory: apps/front
@@ -214,22 +224,14 @@ jobs:
       - name: Compress build artifacts
         working-directory: apps/front
         run: |
-          if [ "${FRONT_APP_TYPE}" = "static" ]; then
-            # React SPA (CRA/Vite): 빌드 결과물만 패키징. 서버에서 Nginx가 서빙
-            tar -czvf "${FRONT_TAR_FILE}" \
-              build \
-              "${{ steps.env.outputs.env_file }}" 2>/dev/null || true
-          else
-            # Next.js SSR: .next + node_modules + PM2 설정 패키징
-            tar -czvf "${FRONT_TAR_FILE}" \
-              .next \
-              node_modules \
-              public \
-              "${{ steps.env.outputs.env_file }}" \
-              package.json \
-              next.config.* \
-              ecosystem.config.* 2>/dev/null || true
-          fi
+          tar -czvf "${FRONT_TAR_FILE}" \
+            .next \
+            node_modules \
+            public \
+            "${{ steps.env.outputs.env_file }}" \
+            package.json \
+            next.config.* \
+            ecosystem.config.* 2>/dev/null || true
 
       - name: Create GitHub Deployment
         id: gh-deployment
@@ -246,19 +248,32 @@ jobs:
           curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
           chmod +x /usr/local/bin/cloudflared
 
-      - name: Setup SSH via Cloudflare Tunnel
+      # ssh config 구조:
+      #   bastion       : Cloudflare Tunnel 통과 → bastion sshd (셸 차단, ProxyJump 전용)
+      #   deploy-server : bastion을 ProxyJump로 거쳐 실제 배포 서버 도달
+      - name: Setup SSH via Cloudflare Tunnel + Bastion
         run: |
           mkdir -p ~/.ssh
           echo "${{ steps.deploy-secrets.outputs.ssh_key }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           {
-            echo "Host deploy-server"
+            echo "Host bastion"
             echo "  HostName ${FRONT_SSH_TUNNEL_HOST}"
-            echo "  User ${FRONT_SERVER_USER}"
+            echo "  User ${FRONT_BASTION_USER}"
+            echo "  Port ${FRONT_BASTION_PORT}"
             echo "  IdentityFile ~/.ssh/deploy_key"
             echo "  StrictHostKeyChecking no"
             echo "  UserKnownHostsFile /dev/null"
             echo "  ProxyCommand cloudflared access ssh --hostname %h --id ${CF_ACCESS_CLIENT_ID} --secret ${CF_ACCESS_CLIENT_SECRET}"
+            echo ""
+            echo "Host deploy-server"
+            echo "  HostName ${FRONT_TARGET_HOST}"
+            echo "  User ${FRONT_SERVER_USER}"
+            echo "  Port ${FRONT_TARGET_PORT}"
+            echo "  IdentityFile ~/.ssh/deploy_key"
+            echo "  StrictHostKeyChecking no"
+            echo "  UserKnownHostsFile /dev/null"
+            echo "  ProxyJump bastion"
           } > ~/.ssh/config
 
       - name: Deploy to server via SCP

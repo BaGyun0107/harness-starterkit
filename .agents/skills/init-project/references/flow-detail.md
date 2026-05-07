@@ -494,10 +494,14 @@ B방식의 `init-project.sh`는 **단순**하다. `--mode`, `--front-org`, `--ba
 **`init-project.sh`가 수행하는 것:**
 1. `dev-{project}` 레포 생성 (이미 존재하면 건너뜀 — 안전)
 2. `codi-engineers` 팀 admin 권한 부여
-3. `.infisical.json` workspaceId 치환 (환경변수가 있는 경우)
+3. Infisical 설정 치환 (`INFISICAL_PROJECT_ID` 환경변수가 있는 경우):
+   - `apps/{back,front}/.infisical.json` 의 `workspaceId`
+   - `.github/workflows/deploy-*.yml` 5개 파일의 `_PROJECT_ID_` placeholder
 4. GitHub Secrets 등록: `INFISICAL_CLIENT_ID`, `INFISICAL_CLIENT_SECRET`
 5. Git remote → `dev-{project}` 설정
 6. `main`, `dev` 브랜치 생성 + push
+
+**워크플로우의 `_CF_SHARED_PATH_`는 자동 치환되지 않는다.** 프로젝트마다 가변값이라 개발자가 직접 수정해야 한다 (예: `/cloudflare/<env>`). Step 8 완료 메시지에서도 안내된다.
 
 ## Step 8: 완료 안내
 
@@ -534,24 +538,38 @@ B방식의 `init-project.sh`는 **단순**하다. `--mode`, `--front-org`, `--ba
      ⚡ 템플릿: apps/back/.env.example, apps/front/.env.example 에 최소 필요 변수가
         정의되어 있다. 이 파일을 열어 key 목록을 참고하면서 Infisical 에 등록한다.
      - /backend/                   런타임 .env (apps/back/.env.example 참고)
-     - /backend/github-actions/    BACK_SSH_TUNNEL_HOST, BACK_SERVER_USER,
-                                   BACK_DEPLOY_DIR, BACK_APP_NAME,
-                                   BACK_TAR_FILE, BACK_SSH_PRIVATE_KEY,
-                                   BACK_APP_TYPE (선택, 기본 pm2),
-                                   CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET
+     - /backend/github-actions/    BACK_SSH_TUNNEL_HOST  (= bastion hostname)
+                                   BACK_BASTION_USER     (= deploy)
+                                   BACK_BASTION_PORT     (= bastion sshd 포트)
+                                   BACK_TARGET_HOST      (= 실제 배포 서버 IP)
+                                   BACK_TARGET_PORT      (= 배포 서버 sshd 포트)
+                                   BACK_SERVER_USER      (= 배포 서버 사용자)
+                                   BACK_DEPLOY_DIR, BACK_APP_NAME, BACK_TAR_FILE,
+                                   BACK_SSH_PRIVATE_KEY,
+                                   BACK_APP_TYPE (선택, 기본 pm2)
      - /frontend/                  NEXT_PUBLIC_* (apps/front/.env.example 참고)
      - /frontend/github-actions/   (Vercel 배포 시)   VERCEL_ORG_ID, VERCEL_PROJECT_ID
-                                   (PM2/Static 배포 시) FRONT_SSH_TUNNEL_HOST, FRONT_SERVER_USER,
+                                   (PM2/Static 배포 시) FRONT_SSH_TUNNEL_HOST, FRONT_BASTION_USER,
+                                                      FRONT_BASTION_PORT, FRONT_TARGET_HOST,
+                                                      FRONT_TARGET_PORT, FRONT_SERVER_USER,
                                                       FRONT_DEPLOY_DIR, FRONT_APP_NAME,
                                                       FRONT_TAR_FILE, FRONT_SSH_PRIVATE_KEY,
-                                                      FRONT_APP_TYPE (pm2 | static),
-                                                      CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET
+                                                      FRONT_APP_TYPE (pm2 | static)
      - (Shared) /slack/            slack_bot_token, slack_channel
      - (Shared) /vercel/           VERCEL_TOKEN
+     - (Shared) _CF_SHARED_PATH_   CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET
+                                   ※ Cloudflare Tunnel Service Token. 도메인당 1개만 등록 후 재사용
+                                   ※ 경로 예: /cloudflare/{domain}/{subdomain}
+                                   ※ 자세한 셋업: docs/cloudflare-tunnel-ssh-guide.md
 
-  3. Infisical → Vercel Integration (권장)
+  3. 워크플로우 _CF_SHARED_PATH_ 직접 수정
+     - .github/workflows/deploy-*.yml 5개 파일의 _CF_SHARED_PATH_ 자리에
+       이 프로젝트가 사용할 Cloudflare 시크릿 path 입력 (예: /cloudflare/<env>)
+     - 프로젝트마다 가변값이라 자동 치환되지 않음
 
-  4. 배포 서버 사전 준비
+  4. Infisical → Vercel Integration (권장)
+
+  5. 배포 서버 사전 준비
      - Node.js, PM2 설치 (PM2 방식)
      - SSH authorized_keys 에 공개키 등록 (CONTRIBUTING.md "배포용 SSH 키 생성" 참조)
      - Cloudflare Tunnel 설정 (docs/cloudflare-tunnel-ssh-guide.md 참조)
